@@ -8,6 +8,7 @@
 - 기사: 출퇴근 상태, 배송 지도형 루트, 배송 상세, 완료/보냉백 회수 체크
 - 고객: 잔여 회차, 달력 기반 배송일 선택, 배송 요청사항
 - 아키텍처: React, Supabase, PostGIS, Realtime, 리포트 모듈 경계
+- 모바일: `mobile/` Expo 앱으로 Android/iOS 고객, 기사, 관리자 화면 제공
 
 ## 주요 파일
 
@@ -18,6 +19,7 @@
 - `src/domain/services.ts`: Supabase 연동 전 단계의 서비스 경계
 - `docs/architecture.md`: 요구사항 분석 기반 시스템 설계
 - `supabase/schema.sql`: Supabase/PostgreSQL 초안 스키마, 트리거, RLS 정책
+- `mobile/`: Expo React Native Android/iOS 앱
 
 ## 실행
 
@@ -35,3 +37,11 @@ npm test
 3. 관리자 고객 등록 폼을 실제 insert 흐름에 연결합니다.
 4. 기사 화면에 지도 SDK와 위치 권한 처리를 붙입니다.
 5. 정산 테이블을 PDF/CSV 출력으로 확장합니다.
+
+## 모바일 앱 실행
+
+```bash
+cd mobile
+npm run android
+npm run ios
+```
