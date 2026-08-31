@@ -15,6 +15,8 @@
 ## 실행
 
 ```bash
+cp .env.example .env
+# .env 파일의 DATABASE_PASSWORD 값을 로컬 전용 비밀번호로 설정하세요.
 docker compose up -d postgres
 gradle bootRun
 ```
@@ -24,6 +26,6 @@ gradle bootRun
 ```bash
 DATABASE_URL=jdbc:postgresql://localhost:5432/salad_app
 DATABASE_USERNAME=salad_app
-DATABASE_PASSWORD=salad_app
+DATABASE_PASSWORD=
 SERVER_PORT=8080
 ```
