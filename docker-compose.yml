@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: salad-app-postgres
+    environment:
+      POSTGRES_DB: salad_app
+      POSTGRES_USER: salad_app
+      POSTGRES_PASSWORD: salad_app
+    ports:
+      - "5432:5432"
+    volumes:
+      - salad_postgres_data:/var/lib/postgresql/data
+      - ./database/seeds:/docker-entrypoint-initdb.d/seeds:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U salad_app -d salad_app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  salad_postgres_data:

@@ -1,0 +1,26 @@
+# 샐러드 정기배송 모바일 앱
+
+Expo React Native 기반 Android/iOS 앱입니다. 고객 배송일 예약, 기사 출퇴근/배송 지도, 관리자 현황/정산 화면을 포함합니다.
+
+## 실행
+
+```bash
+npm install
+npm run android
+npm run ios
+```
+
+## 주요 구조
+
+- `App.tsx`: 역할 선택과 역할별 탭 네비게이션
+- `src/screens/customer`: 고객 예약/주문 화면
+- `src/screens/driver`: 기사 출퇴근/배송지도 화면
+- `src/screens/admin`: 관리자 현황/계정 화면
+- `src/lib/api.ts`: Spring Boot REST API 클라이언트
+- `src/services/deliveryService.ts`: 배송/근태/정산 API 서비스 경계
+
+## 환경변수
+
+```bash
+EXPO_PUBLIC_API_BASE_URL=http://localhost:8080/api
+```

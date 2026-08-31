@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: salad-delivery-backend
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/salad_app}
+    username: ${DATABASE_USERNAME:salad_app}
+    password: ${DATABASE_PASSWORD:salad_app}
+  flyway:
+    enabled: true
+    locations:
+      - filesystem:../database/migrations
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

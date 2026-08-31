@@ -2,7 +2,7 @@
 
 ## 결론
 
-엑셀 요구사항은 단순 주문 앱이 아니라 고객 예약, 기사 배송, 관리자 운영이 결합된 정기배송 운영 시스템입니다. 첫 버전은 React 웹 관리자 콘솔을 중심으로 만들고, 기사/고객 모바일 화면은 같은 도메인 모델을 공유하는 별도 React Native 또는 PWA 화면으로 확장하는 구조가 적합합니다.
+엑셀 요구사항은 단순 주문 앱이 아니라 고객 예약, 기사 배송, 관리자 운영이 결합된 정기배송 운영 시스템입니다. 첫 버전은 React Native 모바일 앱, Spring Boot API 서버, PostgreSQL 데이터베이스를 분리한 monorepo 구조가 적합합니다.
 
 ## 역할
 
@@ -12,10 +12,10 @@
 
 ## 추천 스택
 
-- Frontend: React, TypeScript, CSS/Tailwind 계열 스타일링
-- Mobile extension: React Native Expo
-- Backend: Supabase Auth, PostgreSQL, Realtime
-- Geo: PostGIS, delivery zone boundary, latitude/longitude
+- Frontend: React Native Expo, TypeScript
+- Backend: Spring Boot, Spring Security, Spring Data JPA
+- DB: PostgreSQL, Flyway migration
+- Geo: latitude/longitude 우선 저장, 추후 PostGIS 확장
 - Reporting: browser PDF print, CSV export, 추후 서버 리포트 자동화
 
 ## 핵심 데이터 흐름
