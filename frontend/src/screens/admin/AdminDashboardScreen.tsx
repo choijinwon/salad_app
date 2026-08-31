@@ -1,9 +1,10 @@
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Badge, Card, MetricCard, Page, PrimaryButton, SectionTitle } from "../../components/ui";
 import { deliveries } from "../../data/mockData";
 import { buildDailySettlement } from "../../services/deliveryService";
-import { colors, spacing } from "../../theme";
+import { colors } from "../../theme";
 
 export default function AdminDashboardScreen() {
   const completed = deliveries.filter((delivery) => delivery.status === "DELIVERED");
@@ -33,88 +34,55 @@ export default function AdminDashboardScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
+      <Page>
+      <View style={styles.hero}>
+        <Text style={styles.eyebrow}>관리자 현황</Text>
+        <Text style={styles.title}>오늘 배송 운영</Text>
+        <Text style={styles.muted}>
+          완료, 이동 중, 보냉백 회수 상태를 한 번에 확인합니다.
+        </Text>
+      </View>
+
       <View style={styles.grid}>
-        <Metric label="오늘 배송" value={`${deliveries.length}건`} />
-        <Metric label="배송 완료" value={`${completed.length}건`} />
-        <Metric label="진행 중" value={`${inTransit.length}건`} />
-        <Metric label="보냉백 회수" value={`${bagReturned.length}건`} />
+        <MetricCard label="오늘 배송" value={`${deliveries.length}건`} tone="blue" />
+        <MetricCard label="배송 완료" value={`${completed.length}건`} tone="green" />
+        <MetricCard label="진행 중" value={`${inTransit.length}건`} tone="amber" />
+        <MetricCard label="보냉백 회수" value={`${bagReturned.length}건`} tone="coral" />
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>일일 정산</Text>
+      <Card>
+        <SectionTitle title="일일 정산" subtitle="완료된 배송 기준으로 집계됩니다." />
         <Text style={styles.amount}>{totalAmount.toLocaleString("ko-KR")}원</Text>
-        <Pressable accessibilityRole="button" onPress={printSettlement} style={styles.primaryButton}>
-          <Text style={styles.primaryButtonText}>정산 PDF 출력/공유</Text>
-        </Pressable>
-      </View>
+        <PrimaryButton onPress={printSettlement}>정산 PDF 출력/공유</PrimaryButton>
+      </Card>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>보냉백 미회수</Text>
+      <Card>
+        <SectionTitle title="보냉백 미회수" subtitle="다음 배송 전 회수 확인이 필요합니다." />
         {deliveries
           .filter((delivery) => !delivery.insulatedBagReturned)
           .map((delivery) => (
             <View key={delivery.id} style={styles.row}>
               <View>
                 <Text style={styles.name}>{delivery.customerName}</Text>
-                <Text style={styles.sub}>{delivery.address}</Text>
-              </View>
-              <Text style={styles.badge}>미회수</Text>
+                  <Text style={styles.sub}>{delivery.address}</Text>
+                </View>
+              <Badge tone="coral">미회수</Badge>
             </View>
           ))}
-      </View>
+      </Card>
+      </Page>
     </ScrollView>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.metric}>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={styles.metricValue}>{value}</Text>
-    </View>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
-    gap: 14,
-    padding: spacing.page,
+    paddingBottom: 8,
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
-  },
-  metric: {
-    backgroundColor: colors.panel,
-    borderColor: colors.line,
-    borderRadius: spacing.radius,
-    borderWidth: 1,
-    padding: 14,
-    width: "48%",
-  },
-  metricLabel: {
-    color: colors.muted,
-    fontWeight: "800",
-  },
-  metricValue: {
-    color: colors.foreground,
-    fontSize: 24,
-    fontWeight: "900",
-    marginTop: 6,
-  },
-  card: {
-    backgroundColor: colors.panel,
-    borderColor: colors.line,
-    borderRadius: spacing.radius,
-    borderWidth: 1,
-    padding: 16,
-  },
-  cardTitle: {
-    color: colors.foreground,
-    fontSize: 18,
-    fontWeight: "900",
-    marginBottom: 10,
   },
   amount: {
     color: colors.greenDark,
@@ -122,16 +90,29 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     marginBottom: 12,
   },
-  primaryButton: {
-    alignItems: "center",
-    backgroundColor: colors.green,
-    borderRadius: spacing.radius,
-    justifyContent: "center",
-    minHeight: 46,
-  },
-  primaryButtonText: {
-    color: "white",
+  eyebrow: {
+    color: colors.greenDark,
+    fontSize: 12,
     fontWeight: "900",
+  },
+  hero: {
+    backgroundColor: colors.greenSoft,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 18,
+  },
+  muted: {
+    color: colors.muted,
+    lineHeight: 21,
+    marginTop: 8,
+  },
+  title: {
+    color: colors.foreground,
+    fontSize: 30,
+    fontWeight: "900",
+    letterSpacing: 0,
+    marginTop: 4,
   },
   row: {
     alignItems: "center",
@@ -148,15 +129,5 @@ const styles = StyleSheet.create({
   sub: {
     color: colors.muted,
     marginTop: 3,
-  },
-  badge: {
-    backgroundColor: "#ffe6df",
-    borderRadius: 999,
-    color: colors.coral,
-    fontSize: 12,
-    fontWeight: "900",
-    overflow: "hidden",
-    paddingHorizontal: 10,
-    paddingVertical: 7,
   },
 });

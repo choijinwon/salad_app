@@ -1,42 +1,42 @@
 import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Badge, Card, HeroPanel, InfoRow, Page, SectionTitle } from "../../components/ui";
 import { customers } from "../../data/mockData";
-import { colors, spacing } from "../../theme";
+import { colors } from "../../theme";
 
 export default function CustomerMyPageScreen() {
   return (
     <ScrollView contentContainerStyle={styles.content}>
-      {customers.map((customer) => (
-        <View key={customer.id} style={styles.card}>
+      <Page>
+        <HeroPanel
+          eyebrow="내 주문"
+          title="정기배송 계정"
+          body="고유식별 ID와 잔여 회차를 확인합니다."
+          tone="light"
+        />
+        <SectionTitle title="등록된 고객" subtitle="앱과 네이버 주문을 함께 관리합니다." />
+        {customers.map((customer) => (
+        <Card key={customer.id}>
+          <View style={styles.headerRow}>
+            <View>
           <Text style={styles.name}>{customer.name}</Text>
           <Text style={styles.code}>{customer.uniqueCode}</Text>
-          <View style={styles.row}>
-            <Text style={styles.label}>주문 경로</Text>
-            <Text style={styles.value}>{customer.orderSource}</Text>
+            </View>
+            <Badge tone={customer.orderSource === "APP" ? "blue" : "green"}>
+              {customer.orderSource}
+            </Badge>
           </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>잔여 회차</Text>
-            <Text style={styles.value}>
-              {customer.remainingCount}/{customer.totalCount}회
-            </Text>
-          </View>
-          <Text style={styles.address}>{customer.address}</Text>
-        </View>
-      ))}
+          <InfoRow label="잔여 회차" value={`${customer.remainingCount}/${customer.totalCount}회`} />
+          <InfoRow label="주소" value={customer.address} />
+        </Card>
+        ))}
+      </Page>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
-    gap: 12,
-    padding: spacing.page,
-  },
-  card: {
-    backgroundColor: colors.panel,
-    borderColor: colors.line,
-    borderRadius: spacing.radius,
-    borderWidth: 1,
-    padding: 16,
+    paddingBottom: 8,
   },
   name: {
     color: colors.foreground,
@@ -49,22 +49,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 4,
   },
-  row: {
+  headerRow: {
+    alignItems: "flex-start",
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 6,
-  },
-  label: {
-    color: colors.muted,
-    fontWeight: "800",
-  },
-  value: {
-    color: colors.foreground,
-    fontWeight: "900",
-  },
-  address: {
-    color: colors.muted,
-    lineHeight: 21,
-    marginTop: 10,
   },
 });

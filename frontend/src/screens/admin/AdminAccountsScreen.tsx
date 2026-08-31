@@ -1,24 +1,31 @@
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Badge, Card, HeroPanel, Page, PrimaryButton, SectionTitle } from "../../components/ui";
 import { customers, drivers, zones } from "../../data/mockData";
 import { colors, spacing } from "../../theme";
 
 export default function AdminAccountsScreen() {
   return (
     <ScrollView contentContainerStyle={styles.content}>
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>네이버 주문 고객 수동 등록</Text>
+      <Page>
+      <HeroPanel
+        eyebrow="계정 관리"
+        title="고객과 기사 운영"
+        body="네이버 주문 고객을 등록하고 배송 구역과 기사 계정을 확인합니다."
+        tone="light"
+      />
+
+      <Card style={styles.card}>
+        <SectionTitle title="네이버 주문 고객 수동 등록" subtitle="고유식별 ID는 입력 정보 기준으로 생성됩니다." />
         <TextInput placeholder="고객명" placeholderTextColor={colors.muted} style={styles.input} />
         <TextInput placeholder="생년월일 YYYY-MM-DD" placeholderTextColor={colors.muted} style={styles.input} />
         <TextInput placeholder="연락처" placeholderTextColor={colors.muted} style={styles.input} />
         <TextInput placeholder="주소" placeholderTextColor={colors.muted} style={styles.input} />
         <Text style={styles.generated}>자동 식별 ID 예시: 이정9104127821</Text>
-        <Pressable accessibilityRole="button" style={styles.primaryButton}>
-          <Text style={styles.primaryButtonText}>고객 등록</Text>
-        </Pressable>
-      </View>
+        <PrimaryButton>고객 등록</PrimaryButton>
+      </Card>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>배송 구역</Text>
+      <Card style={styles.card}>
+        <SectionTitle title="배송 구역" subtitle="기사 배정과 루트 구성 기준입니다." />
         {zones.map((zone) => (
           <View key={zone.id} style={styles.row}>
             <View>
@@ -27,10 +34,10 @@ export default function AdminAccountsScreen() {
             </View>
           </View>
         ))}
-      </View>
+      </Card>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>기사 계정</Text>
+      <Card style={styles.card}>
+        <SectionTitle title="기사 계정" subtitle="구역과 차량 정보를 확인합니다." />
         {drivers.map((driver) => (
           <View key={driver.id} style={styles.row}>
             <View>
@@ -39,13 +46,15 @@ export default function AdminAccountsScreen() {
                 {driver.zoneName} / {driver.vehicleNumber}
               </Text>
             </View>
-            <Text style={styles.badge}>{driver.isActive ? "활성" : "비활성"}</Text>
+            <Badge tone={driver.isActive ? "green" : "slate"}>
+              {driver.isActive ? "활성" : "비활성"}
+            </Badge>
           </View>
         ))}
-      </View>
+      </Card>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>등록 고객</Text>
+      <Card style={styles.card}>
+        <SectionTitle title="등록 고객" subtitle="잔여 회차가 적은 고객을 먼저 확인하세요." />
         {customers.map((customer) => (
           <View key={customer.id} style={styles.row}>
             <View>
@@ -55,34 +64,26 @@ export default function AdminAccountsScreen() {
             <Text style={styles.count}>{customer.remainingCount}회</Text>
           </View>
         ))}
-      </View>
+      </Card>
+      </Page>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
-    gap: 14,
-    padding: spacing.page,
+    paddingBottom: 8,
   },
   card: {
-    backgroundColor: colors.panel,
-    borderColor: colors.line,
-    borderRadius: spacing.radius,
-    borderWidth: 1,
     gap: 10,
-    padding: 16,
-  },
-  cardTitle: {
-    color: colors.foreground,
-    fontSize: 18,
-    fontWeight: "900",
   },
   input: {
-    backgroundColor: "#fbfdf9",
+    backgroundColor: colors.background,
     borderColor: colors.line,
     borderRadius: spacing.radius,
     borderWidth: 1,
+    color: colors.foreground,
+    fontSize: 15,
     minHeight: 46,
     paddingHorizontal: 12,
   },
@@ -92,17 +93,6 @@ const styles = StyleSheet.create({
     color: colors.greenDark,
     fontWeight: "900",
     padding: 12,
-  },
-  primaryButton: {
-    alignItems: "center",
-    backgroundColor: colors.green,
-    borderRadius: spacing.radius,
-    justifyContent: "center",
-    minHeight: 46,
-  },
-  primaryButtonText: {
-    color: "white",
-    fontWeight: "900",
   },
   row: {
     alignItems: "center",
@@ -120,16 +110,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
     lineHeight: 20,
     marginTop: 3,
-  },
-  badge: {
-    backgroundColor: colors.mint,
-    borderRadius: 999,
-    color: colors.greenDark,
-    fontSize: 12,
-    fontWeight: "900",
-    overflow: "hidden",
-    paddingHorizontal: 10,
-    paddingVertical: 7,
   },
   count: {
     color: colors.greenDark,

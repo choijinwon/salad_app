@@ -1,18 +1,25 @@
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Badge, Card, HeroPanel, Page, PrimaryButton, SectionTitle } from "../../components/ui";
 import { lockedDays, reservedDays } from "../../data/mockData";
 import { colors, spacing } from "../../theme";
 
 export default function CustomerCalendarScreen() {
   return (
     <ScrollView contentContainerStyle={styles.content}>
-      <View style={styles.summary}>
-        <Text style={styles.eyebrow}>나의 정기배송</Text>
-        <Text style={styles.title}>10회권 중 4회 남음</Text>
-        <Text style={styles.muted}>배송 전날 18:00 이후에는 수정할 수 없습니다.</Text>
-      </View>
+      <Page style={styles.page}>
+        <HeroPanel
+          eyebrow="나의 정기배송"
+          title="10회권 중 4회 남음"
+          body="배송 전날 18:00 이후에는 수정할 수 없습니다."
+        >
+          <View style={styles.statusRow}>
+            <Badge tone="green">예약 4일</Badge>
+            <Badge tone="coral">마감 1일</Badge>
+          </View>
+        </HeroPanel>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>9월 배송일</Text>
+      <Card>
+        <SectionTitle title="9월 배송일" subtitle="원하는 날짜를 눌러 예약을 변경하세요." />
         <View style={styles.calendar}>
           {Array.from({ length: 30 }, (_, index) => {
             const day = index + 1;
@@ -38,67 +45,34 @@ export default function CustomerCalendarScreen() {
               >
                 <Text style={styles.dayText}>{day}</Text>
                 {(isReserved || isLocked) && (
-                  <Text style={styles.dayLabel}>{isLocked ? "마감" : "예약"}</Text>
+                  <Text style={[styles.dayLabel, isLocked && styles.lockedLabel]}>
+                    {isLocked ? "마감" : "예약"}
+                  </Text>
                 )}
               </Pressable>
             );
           })}
         </View>
-      </View>
+      </Card>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>배송 요청사항</Text>
+      <Card>
+        <SectionTitle title="배송 요청사항" subtitle="기사님에게 전달될 문구입니다." />
         <TextInput
           multiline
           defaultValue="공동현관 1234*, 문 앞 보냉백에 넣어주세요."
+          placeholderTextColor={colors.muted}
           style={styles.textarea}
         />
-        <Pressable accessibilityRole="button" style={styles.primaryButton}>
-          <Text style={styles.primaryButtonText}>요청사항 저장</Text>
-        </Pressable>
-      </View>
+        <PrimaryButton style={styles.primaryButton}>요청사항 저장</PrimaryButton>
+      </Card>
+      </Page>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
-    gap: 14,
-    padding: spacing.page,
-  },
-  summary: {
-    backgroundColor: colors.slate,
-    borderRadius: spacing.radius,
-    padding: 18,
-  },
-  eyebrow: {
-    color: colors.mint,
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  title: {
-    color: "white",
-    fontSize: 26,
-    fontWeight: "900",
-    marginTop: 4,
-  },
-  muted: {
-    color: "#d7e5da",
-    lineHeight: 21,
-    marginTop: 8,
-  },
-  card: {
-    backgroundColor: colors.panel,
-    borderColor: colors.line,
-    borderRadius: spacing.radius,
-    borderWidth: 1,
-    padding: 16,
-  },
-  cardTitle: {
-    color: colors.foreground,
-    fontSize: 18,
-    fontWeight: "900",
-    marginBottom: 12,
+    paddingBottom: 8,
   },
   calendar: {
     flexDirection: "row",
@@ -107,11 +81,11 @@ const styles = StyleSheet.create({
   },
   day: {
     alignItems: "center",
-    backgroundColor: "#fbfdf9",
+    backgroundColor: colors.background,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
-    height: 48,
+    height: 52,
     justifyContent: "center",
     width: "13.3%",
   },
@@ -128,29 +102,35 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   dayLabel: {
-    color: colors.muted,
+    color: colors.greenDark,
     fontSize: 10,
     fontWeight: "800",
+    marginTop: 1,
+  },
+  lockedLabel: {
+    color: colors.coral,
   },
   textarea: {
-    backgroundColor: "#fbfdf9",
+    backgroundColor: colors.background,
     borderColor: colors.line,
     borderRadius: spacing.radius,
     borderWidth: 1,
+    color: colors.foreground,
+    fontSize: 15,
+    lineHeight: 22,
     minHeight: 120,
     padding: 12,
     textAlignVertical: "top",
   },
-  primaryButton: {
-    alignItems: "center",
-    backgroundColor: colors.green,
-    borderRadius: spacing.radius,
-    justifyContent: "center",
-    marginTop: 12,
-    minHeight: 46,
+  page: {
+    paddingBottom: 18,
   },
-  primaryButtonText: {
-    color: "white",
-    fontWeight: "900",
+  primaryButton: {
+    marginTop: 12,
+  },
+  statusRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 14,
   },
 });

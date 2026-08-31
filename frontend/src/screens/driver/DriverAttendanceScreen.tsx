@@ -1,8 +1,9 @@
 import * as Location from "expo-location";
 import { useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Badge, Card, HeroPanel, Page, PrimaryButton, SectionTitle } from "../../components/ui";
 import { attendance } from "../../data/mockData";
-import { colors, spacing } from "../../theme";
+import { colors } from "../../theme";
 
 export default function DriverAttendanceScreen() {
   const [clockedIn, setClockedIn] = useState(true);
@@ -28,18 +29,25 @@ export default function DriverAttendanceScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
-      <View style={styles.hero}>
-        <Text style={styles.eyebrow}>기사 근태</Text>
-        <Text style={styles.title}>{clockedIn ? "출근 중" : "퇴근 상태"}</Text>
-        <Text style={styles.muted}>최근 기록 {lastTime}</Text>
-      </View>
+      <Page>
+        <HeroPanel
+          eyebrow="기사 근태"
+          title={clockedIn ? "출근 중" : "퇴근 상태"}
+          body={`최근 기록 ${lastTime}`}
+        >
+          <View style={styles.statusRow}>
+            <Badge tone={clockedIn ? "green" : "slate"}>
+              {clockedIn ? "근무 활성" : "대기"}
+            </Badge>
+          </View>
+        </HeroPanel>
 
-      <Pressable accessibilityRole="button" onPress={handleAttendance} style={styles.primaryButton}>
-        <Text style={styles.primaryButtonText}>{clockedIn ? "퇴근하기" : "출근하기"}</Text>
-      </Pressable>
+      <PrimaryButton onPress={handleAttendance} tone={clockedIn ? "slate" : "green"}>
+        {clockedIn ? "퇴근하기" : "출근하기"}
+      </PrimaryButton>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>오늘 기사 현황</Text>
+      <Card>
+        <SectionTitle title="오늘 기사 현황" subtitle="출근 시간과 현재 근무 상태입니다." />
         {attendance.map((item) => (
           <View key={item.id} style={styles.row}>
             <View>
@@ -48,63 +56,18 @@ export default function DriverAttendanceScreen() {
                 {item.clockInTime ?? "-"} 출근 / {item.clockOutTime ?? "배송 중"}
               </Text>
             </View>
-            <Text style={styles.badge}>출근</Text>
+            <Badge>출근</Badge>
           </View>
         ))}
-      </View>
+      </Card>
+      </Page>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
-    gap: 14,
-    padding: spacing.page,
-  },
-  hero: {
-    backgroundColor: colors.slate,
-    borderRadius: spacing.radius,
-    padding: 18,
-  },
-  eyebrow: {
-    color: colors.mint,
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  title: {
-    color: "white",
-    fontSize: 34,
-    fontWeight: "900",
-    marginTop: 4,
-  },
-  muted: {
-    color: "#d7e5da",
-    marginTop: 8,
-  },
-  primaryButton: {
-    alignItems: "center",
-    backgroundColor: colors.green,
-    borderRadius: spacing.radius,
-    justifyContent: "center",
-    minHeight: 54,
-  },
-  primaryButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "900",
-  },
-  card: {
-    backgroundColor: colors.panel,
-    borderColor: colors.line,
-    borderRadius: spacing.radius,
-    borderWidth: 1,
-    padding: 16,
-  },
-  cardTitle: {
-    color: colors.foreground,
-    fontSize: 18,
-    fontWeight: "900",
-    marginBottom: 12,
+    paddingBottom: 8,
   },
   row: {
     alignItems: "center",
@@ -122,14 +85,8 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: 3,
   },
-  badge: {
-    backgroundColor: colors.mint,
-    borderRadius: 999,
-    color: colors.greenDark,
-    fontSize: 12,
-    fontWeight: "900",
-    overflow: "hidden",
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+  statusRow: {
+    flexDirection: "row",
+    marginTop: 14,
   },
 });

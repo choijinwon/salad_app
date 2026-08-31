@@ -3,13 +3,8 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useState } from "react";
-import {
-  Pressable,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { SafeAreaView, StyleSheet, Text, View } from "react-native";
+import { PrimaryButton } from "./src/components/ui";
 import AdminAccountsScreen from "./src/screens/admin/AdminAccountsScreen";
 import AdminDashboardScreen from "./src/screens/admin/AdminDashboardScreen";
 import AuthScreen from "./src/screens/AuthScreen";
@@ -28,7 +23,7 @@ export default function App() {
 
   return (
     <NavigationContainer>
-      <StatusBar style="dark" />
+      <StatusBar style={role ? "light" : "dark"} />
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {role === null ? (
           <Stack.Screen name="Auth">
@@ -57,16 +52,12 @@ function RoleShell({
     <SafeAreaView style={styles.shell}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.eyebrow}>Salad Delivery OS</Text>
+          <Text style={styles.eyebrow}>SALAD DELIVERY</Text>
           <Text style={styles.title}>{roleLabel[role]} 앱</Text>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          onPress={onChangeRole}
-          style={styles.roleButton}
-        >
-          <Text style={styles.roleButtonText}>역할 변경</Text>
-        </Pressable>
+        <PrimaryButton onPress={onChangeRole} style={styles.roleButton} tone="slate">
+          역할 변경
+        </PrimaryButton>
       </View>
 
       {role === "CUSTOMER" && <CustomerTabs />}
@@ -137,14 +128,16 @@ const tabScreenOptions = {
   headerShown: false,
   tabBarActiveTintColor: colors.greenDark,
   tabBarInactiveTintColor: colors.muted,
+  tabBarHideOnKeyboard: true,
   tabBarLabelStyle: {
     fontSize: 12,
     fontWeight: "800" as const,
   },
   tabBarStyle: {
-    borderTopColor: colors.line,
-    height: 64,
-    paddingBottom: 8,
+    backgroundColor: colors.panel,
+    borderTopColor: "transparent",
+    height: 68,
+    paddingBottom: 9,
     paddingTop: 6,
   },
 };
@@ -156,34 +149,24 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: "center",
-    backgroundColor: colors.panel,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
+    backgroundColor: colors.slate,
     flexDirection: "row",
     justifyContent: "space-between",
     paddingHorizontal: 18,
-    paddingVertical: 14,
+    paddingVertical: 16,
   },
   eyebrow: {
-    color: colors.greenDark,
+    color: colors.mint,
     fontSize: 11,
     fontWeight: "900",
   },
   title: {
-    color: colors.foreground,
+    color: colors.panel,
     fontSize: 22,
     fontWeight: "900",
     marginTop: 2,
   },
   roleButton: {
-    backgroundColor: colors.slate,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  roleButtonText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "900",
+    minHeight: 40,
   },
 });

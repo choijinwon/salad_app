@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
+import { Badge, Card, PrimaryButton, SectionTitle } from "../../components/ui";
 import { deliveries } from "../../data/mockData";
 import { colors, spacing } from "../../theme";
 
@@ -39,17 +40,29 @@ export default function DriverRouteScreen() {
       </MapView>
 
       <ScrollView contentContainerStyle={styles.sheet}>
-        <Text style={styles.title}>오늘 배송 루트</Text>
+        <SectionTitle
+          title="오늘 배송 루트"
+          subtitle={`${deliveries.length}개 배송지, 선택한 고객의 요청사항을 확인하세요.`}
+        />
         {deliveries.map((delivery) => (
           <Pressable
             accessibilityRole="button"
             key={delivery.id}
             onPress={() => setSelectedId(delivery.id)}
-            style={[styles.routeCard, selectedId === delivery.id && styles.selectedCard]}
+            style={({ pressed }) => [
+              styles.routeCard,
+              selectedId === delivery.id && styles.selectedCard,
+              pressed && styles.pressed,
+            ]}
           >
             <Text style={styles.routeNo}>#{delivery.routeOrder}</Text>
             <View style={styles.routeBody}>
+              <View style={styles.routeHeader}>
               <Text style={styles.name}>{delivery.customerName}</Text>
+                <Badge tone={delivery.status === "DELIVERED" ? "green" : delivery.status === "IN_TRANSIT" ? "blue" : "amber"}>
+                  {statusLabel[delivery.status]}
+                </Badge>
+              </View>
               <Text style={styles.sub}>{delivery.address}</Text>
               <Text style={styles.notes}>{delivery.requestNotes}</Text>
             </View>
@@ -57,19 +70,18 @@ export default function DriverRouteScreen() {
         ))}
 
         {selected && (
-          <View style={styles.detail}>
-            <Text style={styles.name}>{selected.customerName} 상세</Text>
+          <Card style={styles.detail}>
+            <SectionTitle title={`${selected.customerName} 상세`} subtitle={selected.address} />
             <Text style={styles.sub}>{selected.address}</Text>
-            <Pressable
-              accessibilityRole="button"
+            <PrimaryButton
               onPress={() => {
                 Alert.alert("배송 완료", "보냉백 회수 여부와 함께 저장합니다.");
               }}
               style={styles.primaryButton}
             >
-              <Text style={styles.primaryButtonText}>배송 완료 / 보냉백 체크</Text>
-            </Pressable>
-          </View>
+              배송 완료 / 보냉백 체크
+            </PrimaryButton>
+          </Card>
         )}
       </ScrollView>
     </View>
@@ -90,11 +102,6 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: spacing.page,
   },
-  title: {
-    color: colors.foreground,
-    fontSize: 22,
-    fontWeight: "900",
-  },
   routeCard: {
     alignItems: "flex-start",
     backgroundColor: colors.panel,
@@ -109,6 +116,9 @@ const styles = StyleSheet.create({
     borderColor: colors.green,
     borderWidth: 2,
   },
+  pressed: {
+    opacity: 0.78,
+  },
   routeNo: {
     color: colors.greenDark,
     fontWeight: "900",
@@ -117,6 +127,11 @@ const styles = StyleSheet.create({
   routeBody: {
     flex: 1,
     gap: 4,
+  },
+  routeHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   name: {
     color: colors.foreground,
@@ -132,21 +147,16 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   detail: {
-    backgroundColor: colors.panelStrong,
-    borderRadius: spacing.radius,
     gap: 8,
-    padding: 14,
   },
   primaryButton: {
-    alignItems: "center",
-    backgroundColor: colors.green,
-    borderRadius: spacing.radius,
-    justifyContent: "center",
     marginTop: 8,
-    minHeight: 46,
-  },
-  primaryButtonText: {
-    color: "white",
-    fontWeight: "900",
   },
 });
+
+const statusLabel = {
+  DELIVERED: "완료",
+  IN_TRANSIT: "이동 중",
+  PENDING: "대기",
+  SKIPPED: "건너뜀",
+};
