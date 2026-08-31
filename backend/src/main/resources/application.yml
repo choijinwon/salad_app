@@ -8,7 +8,7 @@ spring:
   flyway:
     enabled: true
     locations:
-      - filesystem:../database/migrations
+      - classpath:db/migration
   jpa:
     hibernate:
       ddl-auto: validate
