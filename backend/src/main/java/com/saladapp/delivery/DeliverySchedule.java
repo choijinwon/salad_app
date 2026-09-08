@@ -58,16 +58,64 @@ public class DeliverySchedule {
     @Column(name = "completed_at")
     private OffsetDateTime completedAt;
 
+    @Column(name = "canceled_at")
+    private OffsetDateTime canceledAt;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
     protected DeliverySchedule() {
     }
 
+    public DeliverySchedule(
+            UUID id,
+            UUID subscriptionId,
+            UUID customerId,
+            LocalDate deliveryDate,
+            String address,
+            BigDecimal latitude,
+            BigDecimal longitude,
+            Integer routeOrder
+    ) {
+        this.id = id;
+        this.subscriptionId = subscriptionId;
+        this.customerId = customerId;
+        this.deliveryDate = deliveryDate;
+        this.status = DeliveryStatus.PENDING;
+        this.routeOrder = routeOrder;
+        this.address = address;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.insulatedBagReturned = false;
+        this.createdAt = OffsetDateTime.now();
+    }
+
+    public void changeDate(LocalDate deliveryDate) {
+        this.deliveryDate = deliveryDate;
+    }
+
+    public void changeNotes(String deliveryNotes) {
+        this.deliveryNotes = deliveryNotes;
+    }
+
+    public void assignDriver(UUID driverId, UUID zoneId) {
+        this.driverId = driverId;
+        this.zoneId = zoneId;
+    }
+
+    public void reorder(int routeOrder) {
+        this.routeOrder = routeOrder;
+    }
+
     public void complete(boolean bagReturned) {
         this.status = DeliveryStatus.DELIVERED;
         this.insulatedBagReturned = bagReturned;
         this.completedAt = OffsetDateTime.now();
+    }
+
+    public void cancel() {
+        this.status = DeliveryStatus.CANCELLED;
+        this.canceledAt = OffsetDateTime.now();
     }
 
     public UUID getId() {
@@ -124,6 +172,10 @@ public class DeliverySchedule {
 
     public OffsetDateTime getCompletedAt() {
         return completedAt;
+    }
+
+    public OffsetDateTime getCanceledAt() {
+        return canceledAt;
     }
 
     public OffsetDateTime getCreatedAt() {

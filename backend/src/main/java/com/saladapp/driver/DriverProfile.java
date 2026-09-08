@@ -37,6 +37,12 @@ public class DriverProfile {
         this.active = true;
     }
 
+    public void update(UUID zoneId, String vehicleNumber, boolean active) {
+        this.zoneId = zoneId;
+        this.vehicleNumber = vehicleNumber;
+        this.active = active;
+    }
+
     public UUID getId() {
         return id;
     }

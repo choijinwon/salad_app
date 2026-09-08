@@ -1,8 +1,16 @@
 export type UserRole = "ADMIN" | "DRIVER" | "CUSTOMER";
 
+export interface Session {
+  id: string;
+  role: UserRole;
+  name: string;
+  phone: string | null;
+  uniqueCode: string | null;
+}
+
 export type OrderSource = "NAVER" | "APP";
 
-export type DeliveryStatus = "PENDING" | "IN_TRANSIT" | "DELIVERED" | "SKIPPED";
+export type DeliveryStatus = "PENDING" | "IN_TRANSIT" | "DELIVERED" | "SKIPPED" | "CANCELLED";
 
 export interface DeliveryZone {
   id: string;

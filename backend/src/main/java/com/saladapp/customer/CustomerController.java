@@ -4,14 +4,17 @@ import com.saladapp.common.ApiResponse;
 import com.saladapp.customer.dto.CustomerRegistrationResponse;
 import com.saladapp.customer.dto.CustomerResponse;
 import com.saladapp.customer.dto.ManualCustomerRequest;
+import com.saladapp.customer.dto.SubscriptionResponse;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/customers")
@@ -26,6 +29,11 @@ public class CustomerController {
     @GetMapping
     ApiResponse<List<CustomerResponse>> getCustomers() {
         return ApiResponse.ok(customerService.getCustomers());
+    }
+
+    @GetMapping("/{customerId}/subscriptions")
+    ApiResponse<List<SubscriptionResponse>> getSubscriptions(@PathVariable UUID customerId) {
+        return ApiResponse.ok(customerService.getSubscriptions(customerId));
     }
 
     @PostMapping("/manual")

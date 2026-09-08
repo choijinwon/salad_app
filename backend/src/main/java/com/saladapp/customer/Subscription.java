@@ -49,6 +49,17 @@ public class Subscription {
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
+    public void decreaseRemainingCount() {
+        if (remainingCount > 0) {
+            remainingCount--;
+        }
+    }
+
+    public void cancel() {
+        this.status = SubscriptionStatus.CANCELLED;
+        this.endDate = LocalDate.now();
+    }
+
     protected Subscription() {
     }
 

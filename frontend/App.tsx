@@ -6,6 +6,10 @@ import { useState } from "react";
 import { SafeAreaView, StyleSheet, Text, View } from "react-native";
 import { PrimaryButton } from "./src/components/ui";
 import AdminAccountsScreen from "./src/screens/admin/AdminAccountsScreen";
+import AdminAreasScreen from "./src/screens/admin/AdminAreasScreen";
+import AdminAssignmentScreen from "./src/screens/admin/AdminAssignmentScreen";
+import AdminOrdersScreen from "./src/screens/admin/AdminOrdersScreen";
+import AdminNaverOrdersScreen from "./src/screens/admin/AdminNaverOrdersScreen";
 import AdminDashboardScreen from "./src/screens/admin/AdminDashboardScreen";
 import AuthScreen from "./src/screens/AuthScreen";
 import CustomerCalendarScreen from "./src/screens/customer/CustomerCalendarScreen";
@@ -13,26 +17,26 @@ import CustomerMyPageScreen from "./src/screens/customer/CustomerMyPageScreen";
 import DriverAttendanceScreen from "./src/screens/driver/DriverAttendanceScreen";
 import DriverRouteScreen from "./src/screens/driver/DriverRouteScreen";
 import { colors } from "./src/theme";
-import type { UserRole } from "./src/types";
+import type { Session, UserRole } from "./src/types";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 export default function App() {
-  const [role, setRole] = useState<UserRole | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
 
   return (
     <NavigationContainer>
-      <StatusBar style={role ? "light" : "dark"} />
+      <StatusBar style={session ? "light" : "dark"} />
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {role === null ? (
+        {session === null ? (
           <Stack.Screen name="Auth">
-            {() => <AuthScreen onSelectRole={setRole} />}
+            {() => <AuthScreen onAuthenticated={setSession} />}
           </Stack.Screen>
         ) : (
           <Stack.Screen name="RoleTabs">
             {() => (
-              <RoleShell role={role} onChangeRole={() => setRole(null)} />
+              <RoleShell session={session} onChangeRole={() => setSession(null)} />
             )}
           </Stack.Screen>
         )}
@@ -43,60 +47,52 @@ export default function App() {
 
 function RoleShell({
   onChangeRole,
-  role,
+  session,
 }: {
   onChangeRole: () => void;
-  role: UserRole;
+  session: Session;
 }) {
   return (
     <SafeAreaView style={styles.shell}>
       <View style={styles.header}>
         <View>
           <Text style={styles.eyebrow}>SALAD DELIVERY</Text>
-          <Text style={styles.title}>{roleLabel[role]} 앱</Text>
+          <Text style={styles.title}>{roleLabel[session.role]} 앱 · {session.name}</Text>
         </View>
         <PrimaryButton onPress={onChangeRole} style={styles.roleButton} tone="slate">
           역할 변경
         </PrimaryButton>
       </View>
 
-      {role === "CUSTOMER" && <CustomerTabs />}
-      {role === "DRIVER" && <DriverTabs />}
-      {role === "ADMIN" && <AdminTabs />}
+      {session.role === "CUSTOMER" && <CustomerTabs user={session} />}
+      {session.role === "DRIVER" && <DriverTabs user={session} />}
+      {session.role === "ADMIN" && <AdminTabs />}
     </SafeAreaView>
   );
 }
 
-function CustomerTabs() {
+function CustomerTabs({ user }: { user: Session }) {
   return (
     <Tab.Navigator screenOptions={tabScreenOptions}>
-      <Tab.Screen
-        name="Calendar"
-        component={CustomerCalendarScreen}
-        options={{ title: "배송일" }}
-      />
-      <Tab.Screen
-        name="MyPage"
-        component={CustomerMyPageScreen}
-        options={{ title: "내 주문" }}
-      />
+      <Tab.Screen name="Calendar" options={{ title: "배송일" }}>
+        {() => <CustomerCalendarScreen user={user} />}
+      </Tab.Screen>
+      <Tab.Screen name="MyPage" options={{ title: "내 주문" }}>
+        {() => <CustomerMyPageScreen user={user} />}
+      </Tab.Screen>
     </Tab.Navigator>
   );
 }
 
-function DriverTabs() {
+function DriverTabs({ user }: { user: Session }) {
   return (
     <Tab.Navigator screenOptions={tabScreenOptions}>
-      <Tab.Screen
-        name="Attendance"
-        component={DriverAttendanceScreen}
-        options={{ title: "출퇴근" }}
-      />
-      <Tab.Screen
-        name="Route"
-        component={DriverRouteScreen}
-        options={{ title: "배송지도" }}
-      />
+      <Tab.Screen name="Attendance" options={{ title: "출퇴근" }}>
+        {() => <DriverAttendanceScreen user={user} />}
+      </Tab.Screen>
+      <Tab.Screen name="Route" options={{ title: "배송지도" }}>
+        {() => <DriverRouteScreen user={user} />}
+      </Tab.Screen>
     </Tab.Navigator>
   );
 }
@@ -104,16 +100,12 @@ function DriverTabs() {
 function AdminTabs() {
   return (
     <Tab.Navigator screenOptions={tabScreenOptions}>
-      <Tab.Screen
-        name="Dashboard"
-        component={AdminDashboardScreen}
-        options={{ title: "현황" }}
-      />
-      <Tab.Screen
-        name="Accounts"
-        component={AdminAccountsScreen}
-        options={{ title: "계정" }}
-      />
+        <Tab.Screen name="Dashboard" component={AdminDashboardScreen} options={{ title: "현황" }} />
+        <Tab.Screen name="Assignment" component={AdminAssignmentScreen} options={{ title: "배정" }} />
+        <Tab.Screen name="Orders" component={AdminOrdersScreen} options={{ title: "주문" }} />
+        <Tab.Screen name="Naver" component={AdminNaverOrdersScreen} options={{ title: "네이버" }} />
+        <Tab.Screen name="Accounts" component={AdminAccountsScreen} options={{ title: "계정" }} />
+      <Tab.Screen name="Areas" component={AdminAreasScreen} options={{ title: "지역" }} />
     </Tab.Navigator>
   );
 }

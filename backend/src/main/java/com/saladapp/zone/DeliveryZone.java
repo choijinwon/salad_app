@@ -33,6 +33,11 @@ public class DeliveryZone {
         this.createdAt = OffsetDateTime.now();
     }
 
+    public void update(String zoneName, String description) {
+        this.zoneName = zoneName;
+        this.description = description;
+    }
+
     public UUID getId() {
         return id;
     }

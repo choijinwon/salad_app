@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import {
+  ActivityIndicator,
   Pressable,
   type PressableProps,
   StyleSheet,
@@ -8,6 +9,40 @@ import {
   type ViewStyle,
 } from "react-native";
 import { colors, shadows, spacing } from "../theme";
+
+export function Spinner({
+  label,
+  style,
+}: {
+  label?: string;
+  style?: ViewStyle;
+}) {
+  return (
+    <View style={[styles.spinnerWrap, style]}>
+      <ActivityIndicator color={colors.greenDark} size="large" />
+      {label ? <Text style={styles.spinnerLabel}>{label}</Text> : null}
+    </View>
+  );
+}
+
+export function ErrorState({
+  message = "데이터를 불러오지 못했습니다.",
+  onRetry,
+}: {
+  message?: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <View style={styles.spinnerWrap}>
+      <Text style={styles.errorMessage}>{message}</Text>
+      {onRetry ? (
+        <PrimaryButton onPress={onRetry} style={styles.retryButton} tone="slate">
+          다시 시도
+        </PrimaryButton>
+      ) : null}
+    </View>
+  );
+}
 
 export function Page({
   children,
@@ -88,7 +123,7 @@ export function PrimaryButton({
   ...props
 }: PressableProps & {
   children: ReactNode;
-  tone?: "green" | "slate";
+  tone?: "green" | "slate" | "coral" | "amber";
   style?: ViewStyle;
 }) {
   return (
@@ -96,7 +131,13 @@ export function PrimaryButton({
       accessibilityRole="button"
       style={[
         styles.button,
-        tone === "green" ? styles.buttonGreen : styles.buttonSlate,
+        tone === "green"
+          ? styles.buttonGreen
+          : tone === "coral"
+          ? styles.buttonCoral
+          : tone === "amber"
+          ? styles.buttonAmber
+          : styles.buttonSlate,
         style,
       ]}
       {...props}
@@ -204,6 +245,12 @@ const styles = StyleSheet.create({
   buttonSlate: {
     backgroundColor: colors.slate,
   },
+  buttonCoral: {
+    backgroundColor: colors.coral,
+  },
+  buttonAmber: {
+    backgroundColor: colors.amber,
+  },
   buttonText: {
     color: colors.panel,
     fontSize: 14,
@@ -299,6 +346,29 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "900",
     marginTop: 6,
+  },
+  retryButton: {
+    alignSelf: "center",
+    marginTop: 12,
+    minHeight: 42,
+  },
+  spinnerLabel: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: "800",
+    marginTop: 12,
+  },
+  spinnerWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 56,
+  },
+  errorMessage: {
+    color: colors.coral,
+    fontSize: 15,
+    fontWeight: "800",
+    lineHeight: 22,
+    textAlign: "center",
   },
   page: {
     gap: 14,

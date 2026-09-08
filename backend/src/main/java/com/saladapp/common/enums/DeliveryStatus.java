@@ -4,5 +4,6 @@ public enum DeliveryStatus {
     PENDING,
     IN_TRANSIT,
     DELIVERED,
-    SKIPPED
+    SKIPPED,
+    CANCELLED
 }

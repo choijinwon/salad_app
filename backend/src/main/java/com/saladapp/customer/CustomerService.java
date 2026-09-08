@@ -4,6 +4,7 @@ import com.saladapp.common.enums.UserRole;
 import com.saladapp.customer.dto.CustomerRegistrationResponse;
 import com.saladapp.customer.dto.CustomerResponse;
 import com.saladapp.customer.dto.ManualCustomerRequest;
+import com.saladapp.customer.dto.SubscriptionResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +29,14 @@ public class CustomerService {
         return profileRepository.findByRole(UserRole.CUSTOMER)
                 .stream()
                 .map(CustomerResponse::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<SubscriptionResponse> getSubscriptions(UUID customerId) {
+        return subscriptionRepository.findByCustomerId(customerId)
+                .stream()
+                .map(SubscriptionResponse::from)
                 .toList();
     }
 

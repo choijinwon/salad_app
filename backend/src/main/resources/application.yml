@@ -25,3 +25,11 @@ management:
     web:
       exposure:
         include: health,info
+
+naver:
+  api:
+    enabled: ${NAVER_API_ENABLED:false}
+    client-id: ${NAVER_CLIENT_ID:}
+    client-secret: ${NAVER_CLIENT_SECRET:}
+    account-id: ${NAVER_ACCOUNT_ID:}
+    base-url: ${NAVER_API_BASE_URL:https://api.commerce.naver.com}

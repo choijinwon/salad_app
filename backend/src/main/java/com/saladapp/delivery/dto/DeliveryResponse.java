@@ -26,7 +26,8 @@ public record DeliveryResponse(
         String requestNotes,
         boolean insulatedBagReturned,
         int unitPrice,
-        OffsetDateTime completedAt
+        OffsetDateTime completedAt,
+        OffsetDateTime canceledAt
 ) {
     public static DeliveryResponse from(
             DeliverySchedule schedule,
@@ -53,7 +54,8 @@ public record DeliveryResponse(
                 schedule.getDeliveryNotes(),
                 schedule.isInsulatedBagReturned(),
                 unitPrice,
-                schedule.getCompletedAt()
+                schedule.getCompletedAt(),
+                schedule.getCanceledAt()
         );
     }
 }

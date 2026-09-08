@@ -1,13 +1,40 @@
-import { Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useState } from "react";
+import { Alert, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Badge, Card, PrimaryButton } from "../components/ui";
+import { USE_MOCK } from "../lib/config";
+import { ApiService, createMockSession } from "../services/apiService";
 import { colors, spacing } from "../theme";
-import type { UserRole } from "../types";
+import type { Session, UserRole } from "../types";
 
 export default function AuthScreen({
-  onSelectRole,
+  onAuthenticated,
 }: {
-  onSelectRole: (role: UserRole) => void;
+  onAuthenticated: (session: Session) => void;
 }) {
+  const [code, setCode] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleLogin() {
+    const trimmed = code.trim();
+    if (!trimmed) {
+      Alert.alert("고유식별 ID 입력", "로그인에 필요한 고유식별 ID를 입력해주세요.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const session = await ApiService.login(trimmed);
+      onAuthenticated(session);
+    } catch (error) {
+      Alert.alert("로그인 실패", error instanceof Error ? error.message : "로그인에 실패했습니다.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function handleQuickStart(role: UserRole) {
+    onAuthenticated(createMockSession(role));
+  }
+
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.hero}>
@@ -33,15 +60,34 @@ export default function AuthScreen({
       </View>
 
       <Card style={styles.card}>
-        <Text style={styles.cardTitle}>로그인 정보</Text>
+        <Text style={styles.cardTitle}>로그인</Text>
         <TextInput
-          placeholder="예: 김샐9002147821"
+          placeholder="고유식별 ID 예: 김샐9002147821"
           placeholderTextColor={colors.muted}
           style={styles.input}
+          value={code}
+          onChangeText={setCode}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="done"
+          onSubmitEditing={handleLogin}
         />
-        <RoleButton label="고객으로 시작" onPress={() => onSelectRole("CUSTOMER")} />
-        <RoleButton label="기사로 시작" onPress={() => onSelectRole("DRIVER")} />
-        <RoleButton label="관리자로 시작" onPress={() => onSelectRole("ADMIN")} />
+        <PrimaryButton disabled={submitting} onPress={handleLogin}>
+          {submitting ? "확인 중..." : "로그인"}
+        </PrimaryButton>
+
+        {USE_MOCK ? (
+          <>
+            <View style={styles.quickDivider}>
+              <Text style={styles.quickDividerText}>데모(mock) 전용 빠른 시작</Text>
+            </View>
+            <RoleButton label="고객으로 시작" onPress={() => handleQuickStart("CUSTOMER")} />
+            <RoleButton label="기사로 시작" onPress={() => handleQuickStart("DRIVER")} />
+            <RoleButton label="관리자로 시작" onPress={() => handleQuickStart("ADMIN")} />
+          </>
+        ) : (
+          <Text style={styles.realNotice}>백엔드에 등록된 고유식별 ID로 로그인합니다.</Text>
+        )}
       </Card>
     </SafeAreaView>
   );
@@ -135,6 +181,21 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.78,
+  },
+  quickDivider: {
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    paddingTop: 8,
+  },
+  quickDividerText: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  realNotice: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 18,
   },
   roleArrow: {
     color: colors.greenDark,
