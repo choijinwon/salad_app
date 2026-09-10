@@ -117,7 +117,6 @@ export interface NaverOrderResponse {
   ordererTel: string;
   baseAddress: string;
   detailedAddress: string;
-  totalPaymentAmount: number;
   syncedAt: string;
 }
 
@@ -755,7 +754,6 @@ export const ApiService = {
           ordererTel: "010-1234-5678",
           baseAddress: "서울특별시 강남구 역삼동",
           detailedAddress: "테헤란로 123-45 101동 101호",
-          totalPaymentAmount: 89000,
           syncedAt: new Date().toISOString(),
         },
         {
@@ -772,7 +770,6 @@ export const ApiService = {
           ordererTel: "010-9876-5432",
           baseAddress: "서울특별시 서초구 반포동",
           detailedAddress: "신반포로 45 202동 502호",
-          totalPaymentAmount: 89000,
           syncedAt: new Date().toISOString(),
         },
         {
@@ -789,7 +786,6 @@ export const ApiService = {
           ordererTel: "010-5555-7777",
           baseAddress: "서울특별시 송파구 잠실동",
           detailedAddress: "올림픽로 22 303동 1103호",
-          totalPaymentAmount: 89000,
           syncedAt: new Date().toISOString(),
         },
       ] satisfies NaverOrderResponse[];
