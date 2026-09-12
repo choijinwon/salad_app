@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
-import MapView, { Marker, Polyline } from "react-native-maps";
 import { Badge, Card, ErrorState, PrimaryButton, SectionTitle, Spinner } from "../../components/ui";
 import { ApiService, type DeliveryResponse } from "../../services/apiService";
 import { colors, spacing } from "../../theme";
 import type { Session } from "../../types";
+import DriverRouteMap from "./DriverRouteMap";
 
 export default function DriverRouteScreen({ user }: { user: Session }) {
   const [deliveries, setDeliveries] = useState<DeliveryResponse[]>([]);
@@ -70,33 +70,7 @@ export default function DriverRouteScreen({ user }: { user: Session }) {
         <ErrorState message={error} onRetry={load} />
       ) : (
         <>
-          <MapView
-            initialRegion={{
-              latitude: 37.563,
-              latitudeDelta: 0.04,
-              longitude: 126.918,
-              longitudeDelta: 0.04,
-            }}
-            style={styles.map}
-          >
-            {route.length > 1 ? (
-              <Polyline coordinates={route} strokeColor={colors.green} strokeWidth={4} />
-            ) : null}
-            {deliveries.map((delivery) =>
-              delivery.latitude != null && delivery.longitude != null ? (
-                <Marker
-                  coordinate={{
-                    latitude: Number(delivery.latitude),
-                    longitude: Number(delivery.longitude),
-                  }}
-                  key={delivery.id}
-                  onPress={() => setSelectedId(delivery.id)}
-                  title={delivery.routeOrder != null ? `${delivery.routeOrder}. ${delivery.customerName}` : delivery.customerName}
-                  description={delivery.requestNotes}
-                />
-              ) : null,
-            )}
-          </MapView>
+          <DriverRouteMap deliveries={deliveries} route={route} onSelectDelivery={setSelectedId} />
 
           <ScrollView contentContainerStyle={styles.sheet}>
             <SectionTitle
@@ -182,10 +156,6 @@ const styles = StyleSheet.create({
   },
   center: {
     flex: 1,
-  },
-  map: {
-    flex: 1,
-    minHeight: 290,
   },
   sheet: {
     backgroundColor: colors.background,

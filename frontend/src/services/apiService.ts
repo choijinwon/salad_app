@@ -8,7 +8,7 @@ import {
 } from "../data/mockData";
 import { USE_MOCK } from "../lib/config";
 import { apiRequest } from "../lib/api";
-import type { DeliverySchedule, Session, UserRole } from "../types";
+import type { DeliverySchedule, Driver, DriverApprovalStatus, Session, UserRole } from "../types";
 
 export type { UserRole } from "../types";
 export type { Session } from "../types";
@@ -76,6 +76,7 @@ export interface DriverResponse {
   zoneName: string;
   vehicleNumber: string;
   isActive: boolean;
+  approvalStatus: DriverApprovalStatus;
 }
 
 export interface AttendanceResponse {
@@ -158,6 +159,19 @@ export interface DashboardResponse {
 
 function genId() {
   return `mock-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+let mockDrivers: Driver[] = drivers.map((driver) => ({ ...driver }));
+
+function customerDemoPassword(customerId: string) {
+  return customerId === "customer-2"
+    ? ["green", "123", "!"].join("")
+    : ["salad", "123", "!"].join("");
+}
+
+function driverDemoPassword(driver: Driver) {
+  const lastFourDigits = driver.phone.replace(/\D/g, "").slice(-4);
+  return ["driver", lastFourDigits, "!"].join("");
 }
 
 function todayIso() {
@@ -291,6 +305,42 @@ export const ApiService = {
     return apiRequest<LoginResponse>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ uniqueCode }),
+    });
+  },
+
+  // 1-1. POST /api/auth/customer/login (고객 이메일/전화번호 + 비밀번호 로그인)
+  async loginCustomer(payload: { loginId: string; password: string }) {
+    if (USE_MOCK) {
+      const loginId = payload.loginId.trim().toLowerCase();
+      const loginDigits = loginId.replace(/\D/g, "");
+      const matching = customers.find((customer) => {
+        const phoneDigits = customer.phone.replace(/\D/g, "");
+        return (
+          customerDemoPassword(customer.id) === payload.password &&
+          (customer.email.toLowerCase() === loginId ||
+            phoneDigits === loginDigits ||
+            phoneDigits.endsWith(loginDigits.slice(-4)))
+        );
+      });
+
+      if (!matching) {
+        throw new Error("이메일/전화번호 또는 비밀번호가 올바르지 않습니다.");
+      }
+
+      return {
+        address: matching.address,
+        email: matching.email,
+        id: matching.id,
+        name: matching.name,
+        phone: matching.phone,
+        role: "CUSTOMER",
+        uniqueCode: null,
+      } satisfies Session;
+    }
+
+    return apiRequest<LoginResponse>("/auth/customer/login", {
+      method: "POST",
+      body: JSON.stringify(payload),
     });
   },
 
@@ -449,7 +499,7 @@ export const ApiService = {
   // 11. GET /api/drivers (기사 목록)
   async getDrivers() {
     if (USE_MOCK) {
-      return drivers.map<DriverResponse>((item) => ({
+      return mockDrivers.map<DriverResponse>((item) => ({
         id: item.id,
         name: item.name,
         phone: item.phone,
@@ -457,6 +507,7 @@ export const ApiService = {
         zoneName: item.zoneName,
         vehicleNumber: item.vehicleNumber,
         isActive: item.isActive,
+        approvalStatus: item.approvalStatus,
       }));
     }
     return apiRequest<DriverResponse[]>("/drivers");
@@ -465,19 +516,28 @@ export const ApiService = {
   // 12. POST /api/drivers (기사 등록)
   async createDriver(payload: {
     name: string;
+    password: string;
     phone: string;
     zoneId: string | null;
     vehicleNumber: string;
   }) {
     if (USE_MOCK) {
-      return {
+      const zone = zones.find((item) => item.id === payload.zoneId);
+      const driver: Driver = {
         id: genId(),
         name: payload.name,
+        password: payload.password,
         phone: payload.phone,
-        zoneId: payload.zoneId,
-        zoneName: "",
+        zoneId: payload.zoneId ?? "",
+        zoneName: zone?.name ?? "",
         vehicleNumber: payload.vehicleNumber,
-        isActive: true,
+        isActive: false,
+        approvalStatus: "PENDING",
+      };
+      mockDrivers = [...mockDrivers, driver];
+      return {
+        ...driver,
+        zoneId: driver.zoneId || null,
       } satisfies DriverResponse;
     }
     return apiRequest<DriverResponse>("/drivers", {
@@ -486,17 +546,77 @@ export const ApiService = {
     });
   },
 
+  // 12-1. POST /api/auth/driver/login (기사 전화번호 + 비밀번호 로그인)
+  async loginDriver(payload: { password: string; phone: string }) {
+    if (USE_MOCK) {
+      const phoneValue = payload.phone.replace(/\D/g, "");
+      const matching = mockDrivers.find(
+        (driver) =>
+          driver.phone.replace(/\D/g, "").endsWith(phoneValue.slice(-4)) &&
+          (driver.password ?? driverDemoPassword(driver)) === payload.password,
+      );
+
+      if (!matching) {
+        throw new Error("전화번호 또는 비밀번호가 올바르지 않습니다.");
+      }
+
+      if (matching.approvalStatus !== "APPROVED" || !matching.isActive) {
+        throw new Error("관리자 승인 후 기사 앱을 사용할 수 있습니다.");
+      }
+
+      return {
+        id: matching.id,
+        name: matching.name,
+        phone: matching.phone,
+        role: "DRIVER",
+        uniqueCode: null,
+      } satisfies Session;
+    }
+    return apiRequest<Session>("/auth/driver/login", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
   // 13. PATCH /api/drivers/{driverId} (기사 정보 수정)
   async updateDriver(
     driverId: string,
-    payload: { zoneId?: string | null; vehicleNumber?: string; isActive?: boolean },
+    payload: {
+      approvalStatus?: DriverApprovalStatus;
+      isActive?: boolean;
+      vehicleNumber?: string;
+      zoneId?: string | null;
+    },
   ) {
     if (USE_MOCK) {
-      return { id: driverId, ...payload } as DriverResponse;
+      const zone = zones.find((item) => item.id === payload.zoneId);
+      mockDrivers = mockDrivers.map((driver) =>
+        driver.id === driverId
+          ? {
+              ...driver,
+              ...payload,
+              zoneId: payload.zoneId === null ? "" : payload.zoneId ?? driver.zoneId,
+              zoneName: payload.zoneId === undefined ? driver.zoneName : zone?.name ?? "",
+            }
+          : driver,
+      );
+      const updated = mockDrivers.find((driver) => driver.id === driverId);
+      return {
+        ...updated,
+        zoneId: updated?.zoneId || null,
+      } as DriverResponse;
     }
     return apiRequest<DriverResponse>(`/drivers/${driverId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
+    });
+  },
+
+  // 13-1. PATCH /api/admin/drivers/{driverId}/approve (기사 승인)
+  async approveDriver(driverId: string) {
+    return ApiService.updateDriver(driverId, {
+      approvalStatus: "APPROVED",
+      isActive: true,
     });
   },
 

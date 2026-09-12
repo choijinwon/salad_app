@@ -1,10 +1,13 @@
 export type UserRole = "ADMIN" | "DRIVER" | "CUSTOMER";
+export type DriverApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
 
 export interface Session {
   id: string;
   role: UserRole;
   name: string;
   phone: string | null;
+  address?: string | null;
+  email?: string | null;
   uniqueCode: string | null;
 }
 
@@ -21,6 +24,7 @@ export interface DeliveryZone {
 export interface Customer {
   id: string;
   name: string;
+  email: string;
   uniqueCode: string;
   phone: string;
   address: string;
@@ -36,8 +40,10 @@ export interface Driver {
   zoneId: string;
   zoneName: string;
   phone: string;
+  password?: string;
   vehicleNumber: string;
   isActive: boolean;
+  approvalStatus: DriverApprovalStatus;
 }
 
 export interface DeliverySchedule {

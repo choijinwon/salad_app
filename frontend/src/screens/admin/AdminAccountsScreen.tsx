@@ -17,8 +17,15 @@ export default function AdminAccountsScreen() {
   const [orderZoneId, setOrderZoneId] = useState<string | null>(null);
 
   const [zoneForm, setZoneForm] = useState({ zoneName: "", description: "" });
-  const [driverForm, setDriverForm] = useState({ name: "", phone: "", vehicleNumber: "" });
+  const [driverForm, setDriverForm] = useState({
+    name: "",
+    password: "",
+    phone: "",
+    vehicleNumber: "",
+  });
   const [driverZoneId, setDriverZoneId] = useState<string | null>(null);
+  const pendingDrivers = drivers.filter((driver) => driver.approvalStatus === "PENDING");
+  const approvedDrivers = drivers.filter((driver) => driver.approvalStatus === "APPROVED");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -93,23 +100,38 @@ export default function AdminAccountsScreen() {
   }
 
   async function handleCreateDriver() {
-    if (!driverForm.name || !driverForm.phone) {
-      Alert.alert("입력 필요", "기사명과 연락처를 입력해주세요.");
+    if (!driverForm.name || !driverForm.phone || !driverForm.password) {
+      Alert.alert("입력 필요", "기사명, 연락처, 임시 비밀번호를 입력해주세요.");
       return;
     }
     setSubmitting(true);
     try {
       await ApiService.createDriver({
         name: driverForm.name,
+        password: driverForm.password,
         phone: driverForm.phone,
         zoneId: driverZoneId,
         vehicleNumber: driverForm.vehicleNumber,
       });
-      setDriverForm({ name: "", phone: "", vehicleNumber: "" });
+      Alert.alert("승인 대기 등록", "관리자 승인 후 기사 앱 로그인이 가능합니다.");
+      setDriverForm({ name: "", password: "", phone: "", vehicleNumber: "" });
       setDriverZoneId(null);
       await load();
     } catch (e) {
       Alert.alert("등록 실패", e instanceof Error ? e.message : "다시 시도해주세요.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleApproveDriver(driver: DriverResponse) {
+    setSubmitting(true);
+    try {
+      await ApiService.approveDriver(driver.id);
+      Alert.alert("기사 승인 완료", `${driver.name} 기사님이 기사 앱을 사용할 수 있습니다.`);
+      await load();
+    } catch (e) {
+      Alert.alert("승인 실패", e instanceof Error ? e.message : "다시 시도해주세요.");
     } finally {
       setSubmitting(false);
     }
@@ -210,8 +232,38 @@ export default function AdminAccountsScreen() {
             </Card>
 
             <Card style={styles.card}>
-              <SectionTitle title="기사 계정" subtitle="구역과 차량 정보를 관리합니다." />
-              {drivers.map((driver) => (
+              <SectionTitle
+                title="배송기사 승인 대기"
+                subtitle="승인 전에는 기사 앱 로그인이 차단됩니다."
+              />
+              {pendingDrivers.map((driver) => (
+                <View key={driver.id} style={styles.row}>
+                  <View>
+                    <Text style={styles.name}>{driver.name}</Text>
+                    <Text style={styles.sub}>
+                      {driver.phone} / {driver.zoneName || "미배정"} / {driver.vehicleNumber || "차량 미등록"}
+                    </Text>
+                  </View>
+                  <View style={styles.rowActions}>
+                    <Badge tone="amber">승인 대기</Badge>
+                    <PrimaryButton
+                      disabled={submitting}
+                      onPress={() => handleApproveDriver(driver)}
+                      style={styles.approveButton}
+                    >
+                      승인
+                    </PrimaryButton>
+                  </View>
+                </View>
+              ))}
+              {pendingDrivers.length === 0 ? (
+                <Text style={styles.sub}>승인 대기 중인 기사가 없습니다.</Text>
+              ) : null}
+            </Card>
+
+            <Card style={styles.card}>
+              <SectionTitle title="기사 계정" subtitle="승인된 기사와 신규 신청을 관리합니다." />
+              {approvedDrivers.map((driver) => (
                 <View key={driver.id} style={styles.row}>
                   <View>
                     <Text style={styles.name}>{driver.name}</Text>
@@ -220,7 +272,7 @@ export default function AdminAccountsScreen() {
                     </Text>
                   </View>
                   <Badge tone={driver.isActive ? "green" : "slate"}>
-                    {driver.isActive ? "활성" : "비활성"}
+                    {driver.isActive ? "승인 완료" : "비활성"}
                   </Badge>
                 </View>
               ))}
@@ -254,6 +306,15 @@ export default function AdminAccountsScreen() {
                 onChangeText={(text) => setDriverForm((prev) => ({ ...prev, phone: text }))}
               />
               <TextInput
+                autoCapitalize="none"
+                placeholder="임시 비밀번호"
+                placeholderTextColor={colors.muted}
+                secureTextEntry
+                style={styles.input}
+                value={driverForm.password}
+                onChangeText={(text) => setDriverForm((prev) => ({ ...prev, password: text }))}
+              />
+              <TextInput
                 placeholder="차량번호"
                 placeholderTextColor={colors.muted}
                 style={styles.input}
@@ -261,7 +322,7 @@ export default function AdminAccountsScreen() {
                 onChangeText={(text) => setDriverForm((prev) => ({ ...prev, vehicleNumber: text }))}
               />
               <PrimaryButton disabled={submitting} onPress={handleCreateDriver} tone="slate">
-                기사 등록
+                기사 등록 요청
               </PrimaryButton>
             </Card>
 
@@ -335,7 +396,18 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     flexDirection: "row",
     justifyContent: "space-between",
+    gap: 12,
     paddingTop: 12,
+  },
+  rowActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  approveButton: {
+    minHeight: 36,
+    minWidth: 64,
+    paddingHorizontal: 12,
   },
   name: {
     color: colors.foreground,

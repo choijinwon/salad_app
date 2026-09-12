@@ -3,6 +3,7 @@
     "name": "샐러드 정기배송",
     "slug": "salad-delivery-mobile",
     "version": "1.0.0",
+    "jsEngine": "jsc",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

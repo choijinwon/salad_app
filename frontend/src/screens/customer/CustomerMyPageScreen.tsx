@@ -61,6 +61,9 @@ export default function CustomerMyPageScreen({ user }: { user: Session }) {
                   label="잔여 회차"
                   value={`${subscription.remainingCount}/${subscription.totalCount}회`}
                 />
+                <InfoRow label="전화번호" value={user.phone ?? "-"} />
+                <InfoRow label="주소" value={user.address ?? "-"} />
+                <InfoRow label="이메일" value={user.email ?? "-"} />
                 <InfoRow label="시작일" value={subscription.startDate} />
                 <InfoRow label="단가" value={`${subscription.unitPrice.toLocaleString("ko-KR")}원`} />
                 <InfoRow

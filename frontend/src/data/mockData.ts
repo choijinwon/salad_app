@@ -16,6 +16,7 @@ export const customers: Customer[] = [
   {
     id: "customer-1",
     name: "김샐러",
+    email: "customer@salad.test",
     uniqueCode: "김샐9002147821",
     phone: "010-2478-7821",
     address: "서울시 마포구 월드컵북로 11",
@@ -27,6 +28,7 @@ export const customers: Customer[] = [
   {
     id: "customer-2",
     name: "박그린",
+    email: "green@salad.test",
     uniqueCode: "박그8811034409",
     phone: "010-5121-4409",
     address: "서울시 마포구 성산동 245",
@@ -46,6 +48,7 @@ export const drivers: Driver[] = [
     phone: "010-3000-1201",
     vehicleNumber: "서울12가 3421",
     isActive: true,
+    approvalStatus: "APPROVED",
   },
   {
     id: "driver-2",
@@ -55,6 +58,17 @@ export const drivers: Driver[] = [
     phone: "010-3000-1202",
     vehicleNumber: "서울33나 8201",
     isActive: true,
+    approvalStatus: "APPROVED",
+  },
+  {
+    id: "driver-3",
+    name: "이미승인대기",
+    zoneId: "zone-c",
+    zoneName: "C구역",
+    phone: "010-3000-1203",
+    vehicleNumber: "서울45다 1203",
+    isActive: false,
+    approvalStatus: "PENDING",
   },
 ];
 
