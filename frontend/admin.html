@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>관리자 웹 | Salad Delivery</title>
+    <style>
+      :root {
+        --amber: #b7791f;
+        --bg: #f5f8f3;
+        --card: #ffffff;
+        --coral: #d85f45;
+        --dark: #25332b;
+        --green: #2f7d46;
+        --green-dark: #195d34;
+        --line: #dce6d7;
+        --mint: #cfe9d6;
+        --muted: #657264;
+        --soft: #e9f6ee;
+        --text: #172019;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
+        margin: 0;
+      }
+
+      .page {
+        margin: 0 auto;
+        max-width: 1280px;
+        padding: 28px;
+      }
+
+      .top {
+        align-items: end;
+        display: flex;
+        gap: 18px;
+        justify-content: space-between;
+        margin-bottom: 20px;
+      }
+
+      h1 {
+        font-size: clamp(34px, 6vw, 64px);
+        line-height: 1;
+        margin: 0;
+      }
+
+      .top p {
+        color: var(--muted);
+        font-size: 17px;
+        line-height: 1.55;
+        margin: 14px 0 0;
+        max-width: 720px;
+      }
+
+      .back {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--green-dark);
+        font-size: 13px;
+        font-weight: 900;
+        padding: 12px 14px;
+        text-decoration: none;
+      }
+
+      .shell {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        min-height: 720px;
+        overflow: hidden;
+      }
+
+      .sidebar {
+        background: var(--dark);
+        color: #fff;
+        padding: 20px;
+      }
+
+      .eyebrow {
+        color: var(--mint);
+        font-size: 12px;
+        font-weight: 900;
+        margin: 0 0 10px;
+      }
+
+      .sidebar h2 {
+        font-size: 24px;
+        margin: 0 0 22px;
+      }
+
+      .nav {
+        background: transparent;
+        border: 0;
+        border-radius: 8px;
+        color: var(--mint);
+        cursor: pointer;
+        display: block;
+        font-family: inherit;
+        font-size: 14px;
+        font-weight: 900;
+        margin-bottom: 8px;
+        padding: 12px;
+        text-align: left;
+        width: 100%;
+      }
+
+      .nav.active {
+        background: var(--green);
+        color: #fff;
+      }
+
+      .main {
+        padding: 22px;
+      }
+
+      .panel {
+        display: none;
+      }
+
+      .panel.active {
+        display: block;
+      }
+
+      .title {
+        align-items: center;
+        display: flex;
+        gap: 12px;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+
+      .title h3 {
+        font-size: 28px;
+        margin: 0;
+      }
+
+      .pill {
+        background: var(--soft);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--green-dark);
+        font-size: 12px;
+        font-weight: 900;
+        padding: 9px 12px;
+      }
+
+      .metrics,
+      .grid {
+        display: grid;
+        gap: 12px;
+      }
+
+      .metrics {
+        grid-template-columns: repeat(3, 1fr);
+        margin-bottom: 14px;
+      }
+
+      .metric {
+        border: 1px solid var(--line);
+        border-left: 5px solid var(--green);
+        border-radius: 8px;
+        padding: 14px;
+      }
+
+      .metric b {
+        display: block;
+        font-size: 26px;
+      }
+
+      .metric span,
+      .row span {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 14px 0;
+      }
+
+      .action {
+        background: var(--green);
+        border-radius: 8px;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 900;
+        padding: 11px 13px;
+      }
+
+      .action.light {
+        background: var(--soft);
+        border: 1px solid var(--line);
+        color: var(--green-dark);
+      }
+
+      .table,
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      .table {
+        margin-top: 14px;
+      }
+
+      .table-row {
+        align-items: center;
+        border-top: 1px solid var(--line);
+        display: grid;
+        gap: 10px;
+        grid-template-columns: 1fr 1fr 1fr 1fr;
+        padding: 12px;
+      }
+
+      .table-row:first-child {
+        background: var(--soft);
+        border-top: 0;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      .status {
+        border-radius: 999px;
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 900;
+        padding: 6px 9px;
+        text-align: center;
+      }
+
+      .status.green {
+        background: var(--soft);
+        color: var(--green-dark);
+      }
+
+      .status.amber {
+        background: #fff7e6;
+        color: var(--amber);
+      }
+
+      .status.red {
+        background: #fde8e2;
+        color: var(--coral);
+      }
+
+      .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin-top: 14px;
+      }
+
+      .card {
+        padding: 14px;
+      }
+
+      .card h4 {
+        font-size: 16px;
+        margin: 0 0 10px;
+      }
+
+      .row {
+        align-items: center;
+        border-top: 1px solid var(--line);
+        display: flex;
+        gap: 10px;
+        justify-content: space-between;
+        padding: 10px 0;
+      }
+
+      .row:first-of-type {
+        border-top: 0;
+        padding-top: 0;
+      }
+
+      .tiny {
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 900;
+        padding: 6px 8px;
+      }
+
+      .tiny.approve {
+        background: var(--soft);
+        color: var(--green-dark);
+      }
+
+      .tiny.hold {
+        background: #fde8e2;
+        color: var(--coral);
+      }
+
+      @media (max-width: 860px) {
+        .top,
+        .shell {
+          display: block;
+        }
+
+        .back {
+          display: inline-block;
+          margin-top: 16px;
+        }
+
+        .metrics,
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .table-row {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="top">
+        <div>
+          <h1>관리자 웹</h1>
+          <p>PC에서 주문 현황, 배송 배정, 기사 승인, 네이버 주문 연동, 정산 리포트를 통합 운영합니다.</p>
+        </div>
+        <a class="back" href="./index.html">통합 화면으로</a>
+      </header>
+
+      <section class="shell">
+        <aside class="sidebar">
+          <p class="eyebrow">SALAD OPS</p>
+          <h2>관리자 메뉴</h2>
+          <button class="nav active" type="button" data-tab="overview">운영 현황</button>
+          <button class="nav" type="button" data-tab="delivery">배송 배정</button>
+          <button class="nav" type="button" data-tab="approval">기사 승인</button>
+          <button class="nav" type="button" data-tab="naver">네이버 주문</button>
+        </aside>
+
+        <section class="main">
+          <div class="panel active" data-panel="overview">
+            <div class="title"><h3>운영 현황</h3><span class="pill">2026-09-12</span></div>
+            <div class="metrics">
+              <div class="metric"><b>24건</b><span>오늘 배송</span></div>
+              <div class="metric"><b>18건</b><span>배송 완료</span></div>
+              <div class="metric"><b>3명</b><span>기사 승인 대기</span></div>
+            </div>
+            <div class="actions">
+              <div class="action">새 배송 배정</div>
+              <div class="action light">기사 승인 관리</div>
+              <div class="action light">네이버 주문 가져오기</div>
+              <div class="action light">정산 엑셀 다운로드</div>
+            </div>
+            <div class="table">
+              <div class="table-row"><span>구분</span><span>이름</span><span>상태</span><span>담당</span></div>
+              <div class="table-row"><span>고객</span><b>김샐러</b><span class="status green">예약</span><span>A구역</span></div>
+              <div class="table-row"><span>기사</span><b>박배송</b><span class="status green">승인 완료</span><span>A구역</span></div>
+              <div class="table-row"><span>기사</span><b>이미승인대기</b><span class="status amber">승인 대기</span><span>C구역</span></div>
+            </div>
+          </div>
+
+          <div class="panel" data-panel="delivery">
+            <div class="title"><h3>배송 배정</h3><span class="pill">A구역 · 오전 루트</span></div>
+            <div class="metrics">
+              <div class="metric"><b>8건</b><span>A구역 배정</span></div>
+              <div class="metric"><b>2명</b><span>가용 기사</span></div>
+              <div class="metric"><b>42분</b><span>예상 소요</span></div>
+            </div>
+            <div class="grid">
+              <div class="card">
+                <h4>미배정 주문</h4>
+                <div class="row"><span>김샐러 · 강남구 역삼동</span><b>A구역</b></div>
+                <div class="row"><span>정케일 · 서초구 반포동</span><b>B구역</b></div>
+                <div class="row"><span>최루꼴라 · 송파구 잠실동</span><b>C구역</b></div>
+              </div>
+              <div class="card">
+                <h4>기사 선택</h4>
+                <div class="row"><span>박배송 · A구역 가능</span><b>현재 5건</b></div>
+                <div class="row"><span>최기사 · B구역 가능</span><b>현재 4건</b></div>
+              </div>
+            </div>
+            <div class="table">
+              <div class="table-row"><span>순서</span><span>고객</span><span>기사</span><span>상태</span></div>
+              <div class="table-row"><span>1</span><b>김샐러</b><span>박배송</span><span class="status green">배정 완료</span></div>
+              <div class="table-row"><span>2</span><b>정케일</b><span>최기사</span><span class="status amber">확인 필요</span></div>
+            </div>
+          </div>
+
+          <div class="panel" data-panel="approval">
+            <div class="title"><h3>기사 승인</h3><span class="pill">승인 대기 3명</span></div>
+            <div class="metrics">
+              <div class="metric"><b>12명</b><span>전체 기사</span></div>
+              <div class="metric"><b>9명</b><span>승인 완료</span></div>
+              <div class="metric"><b>3명</b><span>검토 필요</span></div>
+            </div>
+            <div class="table">
+              <div class="table-row"><span>이름</span><span>전화번호</span><span>희망 구역</span><span>승인</span></div>
+              <div class="table-row"><b>이미승인대기</b><span>010-1201-3300</span><span>C구역</span><span><span class="tiny approve">승인</span> <span class="tiny hold">보류</span></span></div>
+              <div class="table-row"><b>한배송</b><span>010-4900-1122</span><span>A구역</span><span><span class="tiny approve">승인</span> <span class="tiny hold">보류</span></span></div>
+              <div class="table-row"><b>송루트</b><span>010-8877-6001</span><span>B구역</span><span><span class="tiny approve">승인</span> <span class="tiny hold">보류</span></span></div>
+            </div>
+          </div>
+
+          <div class="panel" data-panel="naver">
+            <div class="title"><h3>네이버 주문</h3><span class="pill">연동 대기 5건</span></div>
+            <div class="metrics">
+              <div class="metric"><b>15건</b><span>오늘 수집</span></div>
+              <div class="metric"><b>10건</b><span>주소 확인 완료</span></div>
+              <div class="metric"><b>5건</b><span>확인 필요</span></div>
+            </div>
+            <div class="actions">
+              <div class="action">네이버 주문 가져오기</div>
+              <div class="action light">고객 계정 연결</div>
+              <div class="action light">배송 예약 생성</div>
+            </div>
+            <div class="table">
+              <div class="table-row"><span>주문번호</span><span>고객</span><span>확인</span><span>처리</span></div>
+              <div class="table-row"><b>N-240912-01</b><span>김샐러</span><span class="status green">주소 확인</span><span>예약 생성</span></div>
+              <div class="table-row"><b>N-240912-02</b><span>이로메인</span><span class="status amber">전화 확인</span><span>보류</span></div>
+              <div class="table-row"><b>N-240912-03</b><span>정케일</span><span class="status green">결제 완료</span><span>고객 연결</span></div>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+    <script>
+      const buttons = document.querySelectorAll("[data-tab]");
+      const panels = document.querySelectorAll("[data-panel]");
+
+      buttons.forEach((button) => {
+        button.addEventListener("click", () => {
+          const target = button.dataset.tab;
+          buttons.forEach((item) => item.classList.toggle("active", item === button));
+          panels.forEach((panel) => panel.classList.toggle("active", panel.dataset.panel === target));
+        });
+      });
+    </script>
+  </body>
+</html>
