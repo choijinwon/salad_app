@@ -172,6 +172,13 @@ export function completeSpringDelivery(deliveryId: string, insulatedBagReturned:
   });
 }
 
+export function updateSpringDeliveryBag(deliveryId: string, insulatedBagReturned: boolean) {
+  return springRequest<SpringDelivery>(`/deliveries/${deliveryId}/bag-return`, {
+    method: "PATCH",
+    body: JSON.stringify({ insulatedBagReturned }),
+  });
+}
+
 export function assignSpringDelivery(
   deliveryId: string,
   payload: { driverId: string | null; routeOrder?: number | null; zoneId?: string | null },

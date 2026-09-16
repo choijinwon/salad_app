@@ -94,6 +94,17 @@ public class DeliveryService {
     }
 
     @Transactional
+    public DeliveryResponse updateBagReturned(UUID deliveryId, CompleteDeliveryRequest request) {
+        DeliverySchedule schedule = deliveryScheduleRepository.findById(deliveryId)
+                .orElseThrow(() -> new ResourceNotFoundException("배송 일정을 찾을 수 없습니다."));
+        if (schedule.getStatus() == DeliveryStatus.CANCELLED) {
+            throw new BusinessRuleException("취소된 배송은 보냉백 회수 처리할 수 없습니다.");
+        }
+        schedule.updateBagReturned(request.insulatedBagReturned());
+        return toResponse(schedule);
+    }
+
+    @Transactional
     public DeliveryResponse createSchedule(CreateDeliveryRequest request) {
         Subscription subscription = subscriptionRepository.findById(request.subscriptionId())
                 .orElseThrow(() -> new ResourceNotFoundException("구독권을 찾을 수 없습니다."));

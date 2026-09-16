@@ -507,6 +507,19 @@ ion-card {
   white-space: normal;
 }
 
+.driver-route-badges {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 96px;
+}
+
+.driver-route-badges ion-badge {
+  text-align: center;
+  white-space: nowrap;
+}
+
 .admin-topbar-actions button {
   align-items: center;
   background: #ffffff;

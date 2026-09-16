@@ -45,6 +45,7 @@ import {
   loginSpringDriver,
   searchSpringAddresses,
   signupSpringCustomer,
+  updateSpringDeliveryBag,
   updateSpringDriver,
   type SpringAddressItem,
   type SpringCustomer,
@@ -790,11 +791,30 @@ function DriverArea() {
   function updateSelected(patch: Partial<Delivery>) {
     if (!selected) return;
 
-    const nextAllDeliveries = readDispatchDeliveries().map((delivery) =>
+    const nextDriverDeliveries = deliveries.map((delivery) =>
       delivery.id === selected.id ? { ...delivery, ...patch } : delivery,
     );
-    saveDispatchDeliveries(nextAllDeliveries);
-    setDeliveries(nextAllDeliveries.filter((delivery) => delivery.assignedDriver === currentDriverName));
+    setDeliveries(nextDriverDeliveries);
+    setSelectedIndex((index) => Math.max(0, Math.min(index, nextDriverDeliveries.length - 1)));
+
+    const storedDeliveries = readDispatchDeliveries();
+    if (storedDeliveries.some((delivery) => delivery.id === selected.id)) {
+      saveDispatchDeliveries(
+        storedDeliveries.map((delivery) =>
+          delivery.id === selected.id ? { ...delivery, ...patch } : delivery,
+        ),
+      );
+    }
+
+    if (isUuid(selected.id) && patch.done) {
+      completeSpringDelivery(selected.id, patch.bagCollected ?? selected.bagCollected)
+        .then(() => undefined)
+        .catch(() => flash("배송 완료 API 저장에 실패했습니다."));
+    } else if (isUuid(selected.id) && patch.bagCollected !== undefined) {
+      updateSpringDeliveryBag(selected.id, patch.bagCollected)
+        .then(() => undefined)
+        .catch(() => flash("보냉백 회수 API 저장에 실패했습니다."));
+    }
   }
 
   if (!loggedIn) {
@@ -859,14 +879,19 @@ function DriverArea() {
                     <p>{delivery.memo}</p>
                     <p>{delivery.bagCount === 0 ? "보냉백 없음" : delivery.bagCollected ? `보냉백 ${delivery.bagCount}개 회수 완료` : `보냉백 ${delivery.bagCount}개 회수 필요`}</p>
                   </IonLabel>
-                  <IonBadge color={delivery.done ? "success" : "medium"}>{delivery.done ? "완료" : "대기"}</IonBadge>
+                  <div className="driver-route-badges" slot="end">
+                    <IonBadge color={delivery.done ? "success" : "medium"}>{delivery.done ? "배송 완료" : "배송 대기"}</IonBadge>
+                    <IonBadge color={delivery.bagCount === 0 || delivery.bagCollected ? "success" : "warning"}>
+                      {delivery.bagCount === 0 ? "보냉백 없음" : delivery.bagCollected ? "보냉백 회수 완료" : "보냉백 미회수"}
+                    </IonBadge>
+                  </div>
                 </IonItem>
               ))}
             </IonList>
             <IonButton disabled={!selected} expand="block" onClick={() => { updateSelected({ done: true }); flash(`${selected.customer} 배송 완료 처리되었습니다.`); }}>
               선택 배송 완료
             </IonButton>
-            <IonButton disabled={!selected} expand="block" fill="outline" onClick={() => {
+            <IonButton disabled={!selected || selected.bagCollected} expand="block" fill={selected?.bagCollected ? "solid" : "outline"} color={selected?.bagCollected ? "success" : undefined} onClick={() => {
               if (selected.bagCount === 0) {
                 flash(`${selected.customer} 고객은 회수할 보냉백이 없습니다.`);
                 return;
@@ -875,7 +900,7 @@ function DriverArea() {
               flash(`${selected.customer} 보냉백 ${selected.bagCount}개 회수 완료되었습니다.`);
             }}>
               <IonIcon slot="start" icon={bagCheckOutline} />
-              보냉백 회수 완료
+              {selected?.bagCollected ? "보냉백 회수 완료됨" : "보냉백 회수 완료"}
             </IonButton>
           </>
         )}
@@ -1176,9 +1201,13 @@ function AdminArea() {
     updateDispatchDeliveries(
       dispatchDeliveries.map((delivery) => (delivery.id === deliveryId ? { ...delivery, ...patch } : delivery)),
     );
-    if (isUuid(deliveryId) && (patch.done || patch.bagCollected !== undefined)) {
+    if (isUuid(deliveryId) && patch.done) {
       const current = dispatchDeliveries.find((delivery) => delivery.id === deliveryId);
       completeSpringDelivery(deliveryId, patch.bagCollected ?? current?.bagCollected ?? false)
+        .then(refreshSpringData)
+        .catch(() => setApiStatus("API 저장 실패 · 데모 반영"));
+    } else if (isUuid(deliveryId) && patch.bagCollected !== undefined) {
+      updateSpringDeliveryBag(deliveryId, patch.bagCollected)
         .then(refreshSpringData)
         .catch(() => setApiStatus("API 저장 실패 · 데모 반영"));
     }

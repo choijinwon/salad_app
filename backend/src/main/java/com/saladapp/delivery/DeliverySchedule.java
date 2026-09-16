@@ -113,6 +113,10 @@ public class DeliverySchedule {
         this.completedAt = OffsetDateTime.now();
     }
 
+    public void updateBagReturned(boolean bagReturned) {
+        this.insulatedBagReturned = bagReturned;
+    }
+
     public void cancel() {
         this.status = DeliveryStatus.CANCELLED;
         this.canceledAt = OffsetDateTime.now();

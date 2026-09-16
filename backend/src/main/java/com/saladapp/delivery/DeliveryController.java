@@ -55,6 +55,14 @@ public class DeliveryController {
         return ApiResponse.ok(deliveryService.completeDelivery(deliveryId, request), "배송 완료 처리되었습니다.");
     }
 
+    @PatchMapping("/{deliveryId}/bag-return")
+    ApiResponse<DeliveryResponse> updateBagReturned(
+            @PathVariable UUID deliveryId,
+            @Valid @RequestBody CompleteDeliveryRequest request
+    ) {
+        return ApiResponse.ok(deliveryService.updateBagReturned(deliveryId, request), "보냉백 회수 상태가 저장되었습니다.");
+    }
+
     @PatchMapping("/{deliveryId}")
     ApiResponse<DeliveryResponse> updateDelivery(
             @PathVariable UUID deliveryId,
