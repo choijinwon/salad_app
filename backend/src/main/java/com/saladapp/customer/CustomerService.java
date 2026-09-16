@@ -5,6 +5,7 @@ import com.saladapp.customer.dto.CustomerRegistrationResponse;
 import com.saladapp.customer.dto.CustomerResponse;
 import com.saladapp.customer.dto.ManualCustomerRequest;
 import com.saladapp.customer.dto.SubscriptionResponse;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,10 +17,16 @@ public class CustomerService {
 
     private static final int DEFAULT_UNIT_PRICE = 8900;
 
+    private final PasswordEncoder passwordEncoder;
     private final ProfileRepository profileRepository;
     private final SubscriptionRepository subscriptionRepository;
 
-    public CustomerService(ProfileRepository profileRepository, SubscriptionRepository subscriptionRepository) {
+    public CustomerService(
+            PasswordEncoder passwordEncoder,
+            ProfileRepository profileRepository,
+            SubscriptionRepository subscriptionRepository
+    ) {
+        this.passwordEncoder = passwordEncoder;
         this.profileRepository = profileRepository;
         this.subscriptionRepository = subscriptionRepository;
     }
@@ -47,6 +54,8 @@ public class CustomerService {
                 UserRole.CUSTOMER,
                 request.name(),
                 request.phone(),
+                request.email(),
+                encodePassword(request.password()),
                 request.birthdate(),
                 request.address(),
                 request.zoneId()
@@ -69,5 +78,12 @@ public class CustomerService {
                 savedSubscription.getId(),
                 savedCustomer.getUniqueCode()
         );
+    }
+
+    private String encodePassword(String password) {
+        if (password == null || password.isBlank()) {
+            return null;
+        }
+        return passwordEncoder.encode(password);
     }
 }

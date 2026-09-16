@@ -12,4 +12,8 @@ public interface ProfileRepository extends JpaRepository<Profile, UUID> {
     List<Profile> findByRole(UserRole role);
 
     Optional<Profile> findByUniqueCode(String uniqueCode);
+
+    Optional<Profile> findByEmailIgnoreCase(String email);
+
+    Optional<Profile> findByPhone(String phone);
 }

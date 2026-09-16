@@ -1,5 +1,6 @@
 package com.saladapp.delivery;
 
+import com.saladapp.admin.dto.AdminAssignmentRequest;
 import com.saladapp.common.BusinessRuleException;
 import com.saladapp.common.ResourceNotFoundException;
 import com.saladapp.common.enums.DeliveryStatus;
@@ -211,6 +212,20 @@ public class DeliveryService {
         }
         schedule.cancel();
         return toResponse(deliveryScheduleRepository.save(schedule));
+    }
+
+    @Transactional
+    public DeliveryResponse assignDelivery(UUID deliveryId, AdminAssignmentRequest request) {
+        DeliverySchedule schedule = deliveryScheduleRepository.findById(deliveryId)
+                .orElseThrow(() -> new ResourceNotFoundException("배송 일정을 찾을 수 없습니다."));
+        if (schedule.getStatus() == DeliveryStatus.CANCELLED) {
+            throw new BusinessRuleException("취소된 배송은 배정할 수 없습니다.");
+        }
+        schedule.assignDriver(request.driverId(), request.zoneId());
+        if (request.routeOrder() != null) {
+            schedule.reorder(request.routeOrder());
+        }
+        return toResponse(schedule);
     }
 
     private boolean isLocked(LocalDate deliveryDate) {

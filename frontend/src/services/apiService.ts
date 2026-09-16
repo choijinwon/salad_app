@@ -157,6 +157,24 @@ export interface DashboardResponse {
   }[];
 }
 
+export interface AddressSearchItem {
+  roadAddress: string;
+  jibunAddress: string;
+  zipNo: string;
+  siNm: string;
+  sggNm: string;
+  emdNm: string;
+  detailHint: string;
+}
+
+export interface AddressSearchResponse {
+  source: string;
+  totalCount: number;
+  currentPage: number;
+  countPerPage: number;
+  addresses: AddressSearchItem[];
+}
+
 function genId() {
   return `mock-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -342,6 +360,58 @@ export const ApiService = {
       method: "POST",
       body: JSON.stringify(payload),
     });
+  },
+
+  // 1-2. POST /api/auth/customer/signup (고객 회원가입)
+  async signupCustomer(payload: {
+    address: string;
+    email: string;
+    name: string;
+    password: string;
+    phone: string;
+  }) {
+    if (USE_MOCK) {
+      return {
+        address: payload.address,
+        email: payload.email,
+        id: genId(),
+        name: payload.name,
+        phone: payload.phone,
+        role: "CUSTOMER",
+        uniqueCode: null,
+      } satisfies Session;
+    }
+
+    return apiRequest<LoginResponse>("/auth/customer/signup", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  // 1-3. GET /api/addresses/search?keyword= (도로명주소 검색)
+  async searchAddresses(keyword: string) {
+    if (USE_MOCK) {
+      return {
+        source: "DEMO",
+        totalCount: 1,
+        currentPage: 1,
+        countPerPage: 10,
+        addresses: [
+          {
+            roadAddress: "서울특별시 강남구 테헤란로 123",
+            jibunAddress: "서울특별시 강남구 역삼동 123",
+            zipNo: "06134",
+            siNm: "서울특별시",
+            sggNm: "강남구",
+            emdNm: "역삼동",
+            detailHint: "상세주소를 입력해주세요.",
+          },
+        ],
+      } satisfies AddressSearchResponse;
+    }
+    return apiRequest<AddressSearchResponse>(
+      `/addresses/search?keyword=${encodeURIComponent(keyword)}&size=10`,
+    );
   },
 
   // 2. GET /api/customers (고객 목록 조회)

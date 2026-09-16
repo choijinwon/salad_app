@@ -36,6 +36,23 @@ import {
   settingsOutline,
 } from "ionicons/icons";
 import { useEffect, useMemo, useState } from "react";
+import {
+  assignSpringDelivery,
+  completeSpringDelivery,
+  createSpringDriver,
+  loadSpringSnapshot,
+  loginSpringCustomer,
+  loginSpringDriver,
+  searchSpringAddresses,
+  signupSpringCustomer,
+  updateSpringDriver,
+  type SpringAddressItem,
+  type SpringCustomer,
+  type SpringDelivery,
+  type SpringDriver,
+  type SpringSnapshot,
+  type SpringZone,
+} from "./springApi";
 
 type Area = "customer" | "driver" | "admin";
 type CustomerTab = "home" | "reserve" | "orders" | "profile";
@@ -49,6 +66,8 @@ type SideMenuItem<T extends string> = {
 
 type Delivery = {
   id: string;
+  customerId?: string;
+  driverId?: string | null;
   orderNo: string;
   customer: string;
   phone: string;
@@ -56,6 +75,7 @@ type Delivery = {
   address: string;
   memo: string;
   zone: string;
+  zoneId?: string | null;
   assignedDriver: string | null;
   addressConfirmed: boolean;
   customerActive: boolean;
@@ -68,9 +88,11 @@ type Delivery = {
 };
 
 type DriverProfile = {
+  id?: string;
   name: string;
   phone: string;
   zone: string;
+  zoneId?: string | null;
   status: "승인 완료" | "승인 대기" | "보류";
 };
 
@@ -315,6 +337,85 @@ function readInitialDriverName() {
   return approvedDrivers[0].name;
 }
 
+function driverStatusFromSpring(status: SpringDriver["approvalStatus"], active: boolean): DriverProfile["status"] {
+  if (status === "REJECTED") return "보류";
+  if (status === "APPROVED" || active) return "승인 완료";
+  return "승인 대기";
+}
+
+function mapSpringDrivers(drivers: SpringDriver[]): DriverProfile[] {
+  return drivers.map((driver) => ({
+    id: driver.id,
+    name: driver.name,
+    phone: driver.phone,
+    status: driverStatusFromSpring(driver.approvalStatus, driver.isActive),
+    zone: driver.zoneName || "미지정",
+    zoneId: driver.zoneId,
+  }));
+}
+
+function mapSpringZones(zones: SpringZone[]) {
+  return zones.map((zone) => zone.zoneName);
+}
+
+function buildSpringZoneAssignments(drivers: SpringDriver[], zones: SpringZone[]) {
+  return zones.reduce<ZoneAssignment>((assignments, zone) => {
+    const driver = drivers.find((item) => item.zoneId === zone.id && item.isActive);
+    if (driver) assignments[zone.zoneName] = driver.name;
+    return assignments;
+  }, {});
+}
+
+function mapSpringDeliveries(deliveries: SpringDelivery[], customers: SpringCustomer[]): Delivery[] {
+  return deliveries.map((delivery, index) => {
+    const customer = customers.find((item) => item.id === delivery.customerId);
+    return {
+      address: delivery.address,
+      addressConfirmed: true,
+      assignedDriver: delivery.driverName || null,
+      bagCollected: delivery.insulatedBagReturned,
+      bagCount: delivery.insulatedBagReturned ? 0 : 1,
+      customer: delivery.customerName || customer?.name || "고객",
+      customerActive: delivery.status !== "CANCELLED",
+      customerId: delivery.customerId,
+      done: delivery.status === "DELIVERED",
+      driverId: delivery.driverId,
+      email: "",
+      id: delivery.id,
+      lat: delivery.latitude ?? 37.50064,
+      lng: delivery.longitude ?? 127.03644,
+      memo: delivery.requestNotes || "요청사항 없음",
+      orderNo: `ORD-${delivery.deliveryDate.replace(/-/g, "")}-${String(index + 1).padStart(3, "0")}`,
+      orderPrepared: delivery.status !== "PENDING",
+      phone: customer?.phone ?? "",
+      zone: delivery.zoneName || "미지정",
+      zoneId: delivery.zoneId,
+    };
+  });
+}
+
+function isUuid(value?: string | null) {
+  return Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value));
+}
+
+function applySpringSnapshot(
+  snapshot: SpringSnapshot,
+  setDispatchDeliveries: (deliveries: Delivery[]) => void,
+  setDriverProfiles: (drivers: DriverProfile[]) => void,
+  setDeliveryZones: (zones: string[]) => void,
+  setZoneAssignments: (assignments: ZoneAssignment) => void,
+) {
+  const deliveries = mapSpringDeliveries(snapshot.deliveries, snapshot.customers);
+  const drivers = mapSpringDrivers(snapshot.drivers);
+  const zones = mapSpringZones(snapshot.zones);
+  const assignments = buildSpringZoneAssignments(snapshot.drivers, snapshot.zones);
+
+  if (deliveries.length > 0) setDispatchDeliveries(deliveries);
+  if (drivers.length > 0) setDriverProfiles(drivers);
+  if (zones.length > 0) setDeliveryZones(zones);
+  setZoneAssignments(assignments);
+}
+
 function CustomerArea() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [showSignup, setShowSignup] = useState(false);
@@ -323,6 +424,12 @@ function CustomerArea() {
   const [phone, setPhone] = useState("010-1234-5678");
   const [address, setAddress] = useState("서울 강남구 테헤란로 100");
   const [email, setEmail] = useState("customer@salad.test");
+  const [password, setPassword] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [addressKeyword, setAddressKeyword] = useState("");
+  const [addressResults, setAddressResults] = useState<SpringAddressItem[]>([]);
+  const [addressSource, setAddressSource] = useState("");
+  const [addressLoading, setAddressLoading] = useState(false);
   const [selectedDays, setSelectedDays] = useState([2, 9, 16]);
   const [request, setRequest] = useState("공동현관 1234*, 문 앞에 놓아주세요.");
   const [notice, setNotice] = useState("");
@@ -330,6 +437,71 @@ function CustomerArea() {
   function flash(message: string) {
     setNotice(message);
     window.setTimeout(() => setNotice(""), 1800);
+  }
+
+  function applyCustomerSession(session: { name: string; phone: string | null; address: string | null; email: string | null }) {
+    setCustomerName(session.name);
+    setPhone(session.phone ?? phone);
+    setAddress(session.address ?? address);
+    setEmail(session.email ?? email);
+    setLoggedIn(true);
+  }
+
+  async function submitCustomerAuth() {
+    if (!email.trim() || !password.trim()) {
+      flash("이메일과 비밀번호를 입력해주세요.");
+      return;
+    }
+    if (showSignup && (!customerName.trim() || !phone.trim() || !address.trim())) {
+      flash("이름, 전화번호, 주소를 모두 입력해주세요.");
+      return;
+    }
+
+    setAuthLoading(true);
+    try {
+      const session = showSignup
+        ? await signupSpringCustomer({
+            address: address.trim(),
+            email: email.trim(),
+            name: customerName.trim(),
+            password,
+            phone: phone.trim(),
+          })
+        : await loginSpringCustomer({ loginId: email.trim(), password });
+      applyCustomerSession(session);
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "로그인 처리에 실패했습니다.");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function submitAddressSearch() {
+    if (addressKeyword.trim().length < 2) {
+      flash("주소 검색어를 2글자 이상 입력해주세요.");
+      return;
+    }
+
+    setAddressLoading(true);
+    try {
+      const result = await searchSpringAddresses(addressKeyword.trim());
+      setAddressResults(result.addresses);
+      setAddressSource(result.source === "JUSO" ? "도로명주소 API" : "데모 주소");
+      if (result.addresses.length === 0) {
+        flash("검색 결과가 없습니다.");
+      }
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "주소 검색에 실패했습니다.");
+    } finally {
+      setAddressLoading(false);
+    }
+  }
+
+  function selectAddress(item: SpringAddressItem) {
+    setAddress(item.roadAddress || item.jibunAddress);
+    setAddressKeyword("");
+    setAddressResults([]);
+    flash("주소가 입력되었습니다. 상세주소는 내 정보에서 보완해주세요.");
   }
 
   if (!loggedIn) {
@@ -350,17 +522,49 @@ function CustomerArea() {
                 <IonInput label="이름" labelPlacement="stacked" value={customerName} onIonInput={(e) => setCustomerName(String(e.detail.value ?? ""))} />
                 <IonInput label="전화번호" labelPlacement="stacked" value={phone} onIonInput={(e) => setPhone(String(e.detail.value ?? ""))} />
                 <IonInput label="주소" labelPlacement="stacked" value={address} onIonInput={(e) => setAddress(String(e.detail.value ?? ""))} />
+                <div className="address-search-row">
+                  <IonInput
+                    label="주소 검색"
+                    labelPlacement="stacked"
+                    placeholder="예: 테헤란로 123"
+                    value={addressKeyword}
+                    onIonInput={(e) => setAddressKeyword(String(e.detail.value ?? ""))}
+                  />
+                  <IonButton fill="outline" disabled={addressLoading} onClick={submitAddressSearch}>
+                    <IonIcon slot="start" icon={searchOutline} />
+                    {addressLoading ? "검색중" : "검색"}
+                  </IonButton>
+                </div>
+                {addressResults.length > 0 && (
+                  <IonList className="address-search-results" inset>
+                    {addressSource && (
+                      <IonItem lines="none">
+                        <IonLabel color="medium">{addressSource}</IonLabel>
+                      </IonItem>
+                    )}
+                    {addressResults.map((item) => (
+                      <IonItem button detail={false} key={`${item.zipNo}-${item.roadAddress}`} onClick={() => selectAddress(item)}>
+                        <IonLabel>
+                          <h2>{item.roadAddress}</h2>
+                          <p>{item.jibunAddress}</p>
+                          <p>{item.zipNo} · {item.detailHint || "상세주소 입력 필요"}</p>
+                        </IonLabel>
+                      </IonItem>
+                    ))}
+                  </IonList>
+                )}
               </>
             )}
             <IonInput label="이메일" labelPlacement="stacked" value={email} onIonInput={(e) => setEmail(String(e.detail.value ?? ""))} />
-            <IonInput label="비밀번호" labelPlacement="stacked" placeholder="비밀번호 입력" type="password" />
-            <IonButton expand="block" onClick={() => setLoggedIn(true)}>
+            <IonInput label="비밀번호" labelPlacement="stacked" placeholder="비밀번호 입력" type="password" value={password} onIonInput={(e) => setPassword(String(e.detail.value ?? ""))} />
+            <IonButton expand="block" disabled={authLoading} onClick={submitCustomerAuth}>
               <IonIcon slot="start" icon={logInOutline} />
-              {showSignup ? "가입하고 시작" : "로그인"}
+              {authLoading ? "확인 중..." : showSignup ? "가입하고 시작" : "로그인"}
             </IonButton>
             <IonButton fill="clear" expand="block" onClick={() => setShowSignup(!showSignup)}>
               {showSignup ? "로그인으로 돌아가기" : "회원가입"}
             </IonButton>
+            {notice && <IonChip color="warning">{notice}</IonChip>}
           </IonCardContent>
         </IonCard>
       </ScreenShell>
@@ -481,6 +685,13 @@ function DriverArea() {
   const [showApply, setShowApply] = useState(false);
   const [driverProfiles, setDriverProfiles] = useState(() => readDriverProfiles());
   const [currentDriverName, setCurrentDriverName] = useState(() => readInitialDriverName());
+  const [driverPhone, setDriverPhone] = useState("");
+  const [driverPassword, setDriverPassword] = useState("");
+  const [applyName, setApplyName] = useState("신규기사");
+  const [applyPhone, setApplyPhone] = useState("");
+  const [applyZone, setApplyZone] = useState("A구역");
+  const [applyVehicleNumber, setApplyVehicleNumber] = useState("");
+  const [driverAuthLoading, setDriverAuthLoading] = useState(false);
   const [tab, setTab] = useState<DriverTab>("route");
   const [working, setWorking] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -533,6 +744,49 @@ function DriverArea() {
     window.setTimeout(() => setNotice(""), 1800);
   }
 
+  async function submitDriverAuth() {
+    setDriverAuthLoading(true);
+    try {
+      if (showApply) {
+        if (!applyName.trim() || !applyPhone.trim() || !driverPassword.trim()) {
+          flash("이름, 전화번호, 비밀번호를 입력해주세요.");
+          return;
+        }
+        const zoneId = isUuid(applyZone) ? applyZone : null;
+        await createSpringDriver({
+          name: applyName.trim(),
+          password: driverPassword,
+          phone: applyPhone.trim(),
+          zoneId,
+          vehicleNumber: applyVehicleNumber.trim(),
+        });
+        flash("관리자 승인 대기 상태입니다.");
+        setShowApply(false);
+        setDriverPassword("");
+        return;
+      }
+
+      if (!driverPhone.trim() || !driverPassword.trim()) {
+        flash("전화번호와 비밀번호를 입력해주세요.");
+        return;
+      }
+      const session = await loginSpringDriver({ phone: driverPhone.trim(), password: driverPassword });
+      setCurrentDriverName(session.name);
+      setLoggedIn(true);
+      loadSpringSnapshot()
+        .then((snapshot) => {
+          setDriverProfiles(mapSpringDrivers(snapshot.drivers));
+          const mapped = mapSpringDeliveries(snapshot.deliveries, snapshot.customers);
+          setDeliveries(mapped.filter((delivery) => delivery.assignedDriver === session.name));
+        })
+        .catch(() => undefined);
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "기사 인증 처리에 실패했습니다.");
+    } finally {
+      setDriverAuthLoading(false);
+    }
+  }
+
   function updateSelected(patch: Partial<Delivery>) {
     if (!selected) return;
 
@@ -552,29 +806,17 @@ function DriverArea() {
             <IonCardSubtitle>관리자 승인 후 사용</IonCardSubtitle>
           </IonCardHeader>
           <IonCardContent>
-            {!showApply && (
-              <div className="driver-picker">
-                <span>데모 기사 선택</span>
-                <div>
-                  {approvedDrivers.map((driver) => (
-                    <IonButton
-                      fill={driver.name === currentDriverName ? "solid" : "outline"}
-                      key={driver.name}
-                      size="small"
-                      onClick={() => setCurrentDriverName(driver.name)}
-                    >
-                      {driver.name}
-                    </IonButton>
-                  ))}
-                </div>
-              </div>
+            {showApply && (
+              <>
+                <IonInput label="이름" labelPlacement="stacked" value={applyName} onIonInput={(e) => setApplyName(String(e.detail.value ?? ""))} />
+                <IonInput label="희망 구역" labelPlacement="stacked" value={applyZone} onIonInput={(e) => setApplyZone(String(e.detail.value ?? ""))} />
+                <IonInput label="차량번호" labelPlacement="stacked" value={applyVehicleNumber} onIonInput={(e) => setApplyVehicleNumber(String(e.detail.value ?? ""))} />
+              </>
             )}
-            {showApply && <IonInput label="이름" labelPlacement="stacked" value="신규기사" />}
-            <IonInput label="전화번호" labelPlacement="stacked" value={showApply ? "" : currentDriver.phone} />
-            {showApply && <IonInput label="희망 구역" labelPlacement="stacked" value="A구역" />}
-            <IonInput label="비밀번호" labelPlacement="stacked" placeholder="비밀번호 입력" type="password" />
-            <IonButton expand="block" onClick={() => (showApply ? flash("관리자 승인 대기 상태입니다.") : setLoggedIn(true))}>
-              {showApply ? "승인 요청 보내기" : "기사 앱 시작"}
+            <IonInput label="전화번호" labelPlacement="stacked" value={showApply ? applyPhone : driverPhone} onIonInput={(e) => (showApply ? setApplyPhone(String(e.detail.value ?? "")) : setDriverPhone(String(e.detail.value ?? "")))} />
+            <IonInput label="비밀번호" labelPlacement="stacked" placeholder="비밀번호 입력" type="password" value={driverPassword} onIonInput={(e) => setDriverPassword(String(e.detail.value ?? ""))} />
+            <IonButton expand="block" disabled={driverAuthLoading} onClick={submitDriverAuth}>
+              {driverAuthLoading ? "확인 중..." : showApply ? "승인 요청 보내기" : "기사 앱 시작"}
             </IonButton>
             <IonButton fill="clear" expand="block" onClick={() => setShowApply(!showApply)}>
               {showApply ? "로그인으로 돌아가기" : "기사 가입 신청"}
@@ -758,6 +1000,7 @@ function googleMapsEmbedUrl(delivery: Delivery) {
 function AdminArea() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [tab, setTab] = useState<AdminTab>("overview");
+  const [apiStatus, setApiStatus] = useState("데모 데이터");
   const [dispatchDeliveries, setDispatchDeliveries] = useState(() => readDispatchDeliveries());
   const [driverProfiles, setDriverProfiles] = useState(() => readDriverProfiles());
   const [deliveryZones, setDeliveryZones] = useState(() => readDeliveryZones());
@@ -792,25 +1035,57 @@ function AdminArea() {
     };
   }, []);
 
+  function refreshSpringData() {
+    setApiStatus("Spring API 연결 확인중");
+    loadSpringSnapshot()
+      .then((snapshot) => {
+        applySpringSnapshot(snapshot, setDispatchDeliveries, setDriverProfiles, setDeliveryZones, setZoneAssignments);
+        setApiStatus("Spring API 연결됨");
+      })
+      .catch(() => {
+        setApiStatus("데모 데이터 사용중");
+      });
+  }
+
+  useEffect(() => {
+    if (loggedIn) refreshSpringData();
+  }, [loggedIn]);
+
   function updateDispatchDeliveries(nextDeliveries: Delivery[]) {
     setDispatchDeliveries(nextDeliveries);
     saveDispatchDeliveries(nextDeliveries);
   }
 
   function assignDelivery(deliveryId: string, driverName: string) {
+    const targetDelivery = dispatchDeliveries.find((delivery) => delivery.id === deliveryId);
+    const targetDriver = driverProfiles.find((driver) => driver.name === driverName);
     updateDispatchDeliveries(
       dispatchDeliveries.map((delivery) =>
-        delivery.id === deliveryId ? { ...delivery, assignedDriver: driverName } : delivery,
+        delivery.id === deliveryId
+          ? { ...delivery, assignedDriver: driverName, driverId: targetDriver?.id ?? delivery.driverId ?? null }
+          : delivery,
       ),
     );
+    if (isUuid(deliveryId) && isUuid(targetDriver?.id)) {
+      assignSpringDelivery(deliveryId, {
+        driverId: targetDriver?.id ?? null,
+        zoneId: targetDelivery?.zoneId ?? targetDriver?.zoneId ?? null,
+        routeOrder: null,
+      }).then(refreshSpringData).catch(() => setApiStatus("API 저장 실패 · 데모 반영"));
+    }
   }
 
   function unassignDelivery(deliveryId: string) {
     updateDispatchDeliveries(
       dispatchDeliveries.map((delivery) =>
-        delivery.id === deliveryId ? { ...delivery, assignedDriver: null, done: false } : delivery,
+        delivery.id === deliveryId ? { ...delivery, assignedDriver: null, driverId: null, done: false } : delivery,
       ),
     );
+    if (isUuid(deliveryId)) {
+      assignSpringDelivery(deliveryId, { driverId: null, routeOrder: null, zoneId: null })
+        .then(refreshSpringData)
+        .catch(() => setApiStatus("API 저장 실패 · 데모 반영"));
+    }
   }
 
   function resetDispatchDemo() {
@@ -831,9 +1106,17 @@ function AdminArea() {
   }
 
   function updateDriverStatus(driverName: string, status: DriverProfile["status"]) {
+    const targetDriver = driverProfiles.find((driver) => driver.name === driverName);
     updateDriverProfiles(
       driverProfiles.map((driver) => (driver.name === driverName ? { ...driver, status } : driver)),
     );
+    const targetDriverId = targetDriver?.id;
+    if (isUuid(targetDriverId)) {
+      updateSpringDriver(targetDriverId ?? "", {
+        approvalStatus: status === "승인 완료" ? "APPROVED" : status === "보류" ? "REJECTED" : "PENDING",
+        isActive: status === "승인 완료",
+      }).then(refreshSpringData).catch(() => setApiStatus("API 저장 실패 · 데모 반영"));
+    }
   }
 
   function updateZoneAssignments(nextAssignments: ZoneAssignment) {
@@ -893,6 +1176,12 @@ function AdminArea() {
     updateDispatchDeliveries(
       dispatchDeliveries.map((delivery) => (delivery.id === deliveryId ? { ...delivery, ...patch } : delivery)),
     );
+    if (isUuid(deliveryId) && (patch.done || patch.bagCollected !== undefined)) {
+      const current = dispatchDeliveries.find((delivery) => delivery.id === deliveryId);
+      completeSpringDelivery(deliveryId, patch.bagCollected ?? current?.bagCollected ?? false)
+        .then(refreshSpringData)
+        .catch(() => setApiStatus("API 저장 실패 · 데모 반영"));
+    }
   }
 
   function updateCustomer(customerName: string, patch: Partial<Delivery>) {
@@ -1065,7 +1354,7 @@ function AdminArea() {
         onToggle={() => setMenuCollapsed((collapsed) => !collapsed)}
       />
       <main className="admin-console-main">
-        <AdminConsoleTopBar currentTitle={content.title} />
+        <AdminConsoleTopBar apiStatus={apiStatus} currentTitle={content.title} />
         <div className="admin-module-bar">
           <button className="active" type="button">샐러드 운영</button>
           <button type="button">고객/주문</button>
@@ -1781,7 +2070,7 @@ function AdminConsoleSidebar({
   );
 }
 
-function AdminConsoleTopBar({ currentTitle }: { currentTitle: string }) {
+function AdminConsoleTopBar({ apiStatus, currentTitle }: { apiStatus: string; currentTitle: string }) {
   return (
     <div className="admin-console-topbar">
       <div className="admin-topbar-title">
@@ -1793,6 +2082,7 @@ function AdminConsoleTopBar({ currentTitle }: { currentTitle: string }) {
         <input placeholder="고객명, 주문번호, 기사명 검색" />
       </div>
       <div className="admin-topbar-actions">
+        <span className="admin-api-status">{apiStatus}</span>
         <button aria-label="알림" type="button">
           <IonIcon icon={notificationsOutline} />
           <span>3</span>

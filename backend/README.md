@@ -18,14 +18,16 @@
 cp .env.example .env
 # .env 파일의 DATABASE_PASSWORD 값을 로컬 전용 비밀번호로 설정하세요.
 docker compose up -d postgres
-gradle bootRun
+./scripts/run-local.sh
 ```
 
 ## 환경변수
 
 ```bash
-DATABASE_URL=jdbc:postgresql://localhost:5432/salad_app
+DATABASE_URL=jdbc:postgresql://localhost:15432/salad_app
 DATABASE_USERNAME=salad_app
 DATABASE_PASSWORD=
 SERVER_PORT=8080
+JUSO_API_ENABLED=false
+JUSO_API_KEY=
 ```

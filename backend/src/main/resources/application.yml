@@ -2,7 +2,7 @@ spring:
   application:
     name: salad-delivery-backend
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/salad_app}
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:15432/salad_app}
     username: ${DATABASE_USERNAME:salad_app}
     password: ${DATABASE_PASSWORD}
   flyway:
@@ -33,3 +33,9 @@ naver:
     client-secret: ${NAVER_CLIENT_SECRET:}
     account-id: ${NAVER_ACCOUNT_ID:}
     base-url: ${NAVER_API_BASE_URL:https://api.commerce.naver.com}
+
+juso:
+  api:
+    enabled: ${JUSO_API_ENABLED:false}
+    confm-key: ${JUSO_API_KEY:}
+    base-url: ${JUSO_API_BASE_URL:https://business.juso.go.kr/addrlink/addrLinkApi.do}

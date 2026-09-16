@@ -29,6 +29,11 @@ public class Profile {
     @Column(nullable = false)
     private String phone;
 
+    private String email;
+
+    @Column(name = "password_hash")
+    private String passwordHash;
+
     private LocalDate birthdate;
 
     private String address;
@@ -46,10 +51,26 @@ public class Profile {
     }
 
     public Profile(UUID id, UserRole role, String name, String phone, LocalDate birthdate, String address, UUID zoneId) {
+        this(id, role, name, phone, null, null, birthdate, address, zoneId);
+    }
+
+    public Profile(
+            UUID id,
+            UserRole role,
+            String name,
+            String phone,
+            String email,
+            String passwordHash,
+            LocalDate birthdate,
+            String address,
+            UUID zoneId
+    ) {
         this.id = id;
         this.role = role;
         this.name = name;
         this.phone = phone;
+        this.email = email;
+        this.passwordHash = passwordHash;
         this.birthdate = birthdate;
         this.address = address;
         this.zoneId = zoneId;
@@ -79,6 +100,14 @@ public class Profile {
 
     public String getPhone() {
         return phone;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public String getPasswordHash() {
+        return passwordHash;
     }
 
     public LocalDate getBirthdate() {

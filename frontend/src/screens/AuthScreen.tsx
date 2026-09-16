@@ -70,7 +70,7 @@ export default function AuthScreen({
     setSignup((prev) => ({ ...prev, [field]: value }));
   }
 
-  function handleCustomerSignup() {
+  async function handleCustomerSignup() {
     const name = signup.name.trim();
     const phone = signup.phone.trim();
     const address = signup.address.trim();
@@ -86,18 +86,23 @@ export default function AuthScreen({
       return;
     }
 
-    const session: Session = {
-      address,
-      email,
-      id: `customer-${Date.now()}`,
-      name,
-      phone,
-      role: "CUSTOMER",
-      uniqueCode: null,
-    };
-    setRegisteredSession(session);
-    setRegisteredPassword(password);
-    onAuthenticated(session);
+    setSubmitting(true);
+    try {
+      const session = await ApiService.signupCustomer({
+        address,
+        email,
+        name,
+        password,
+        phone,
+      });
+      setRegisteredSession(session);
+      setRegisteredPassword(password);
+      onAuthenticated(session);
+    } catch (e) {
+      Alert.alert("회원가입 실패", e instanceof Error ? e.message : "다시 시도해주세요.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (mode === "welcome") {

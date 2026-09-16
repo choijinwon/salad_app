@@ -1,6 +1,7 @@
 package com.saladapp.customer.dto;
 
 import com.saladapp.common.enums.OrderSource;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -12,6 +13,8 @@ import java.util.UUID;
 public record ManualCustomerRequest(
         @NotBlank String name,
         @NotBlank String phone,
+        @Email String email,
+        String password,
         @NotNull LocalDate birthdate,
         @NotBlank String address,
         @NotNull UUID zoneId,

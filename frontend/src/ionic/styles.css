@@ -470,6 +470,43 @@ ion-card {
   gap: 14px;
 }
 
+.admin-api-status {
+  background: #ecfdf3;
+  border: 1px solid #abefc6;
+  border-radius: 999px;
+  color: #067647;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 8px 11px;
+  white-space: nowrap;
+}
+
+.address-search-row {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 8px;
+}
+
+.address-search-row ion-button {
+  min-height: 44px;
+}
+
+.address-search-results {
+  margin-top: 10px;
+}
+
+.address-search-results h2 {
+  font-size: 14px;
+  font-weight: 800;
+  white-space: normal;
+}
+
+.address-search-results p {
+  white-space: normal;
+}
+
 .admin-topbar-actions button {
   align-items: center;
   background: #ffffff;

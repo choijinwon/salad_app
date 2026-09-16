@@ -1,7 +1,8 @@
 const defaultBaseUrl = "http://localhost:8080/api";
+const env = import.meta.env as Record<string, string | undefined>;
 
 export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? defaultBaseUrl;
+  (env.VITE_API_BASE_URL ?? env.EXPO_PUBLIC_API_BASE_URL ?? defaultBaseUrl).replace(/\/$/, "");
 
 export interface ApiResponse<T> {
   success: boolean;

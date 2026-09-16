@@ -13,8 +13,6 @@ import { ApiService } from "../../services/apiService";
 import { colors, spacing } from "../../theme";
 import type { Session } from "../../types";
 
-const DRIVER_DEMO_PASSWORD = ["driver", "1201", "!"].join("");
-
 export default function DriverAuthScreen({
   onAuthenticated,
 }: {
@@ -96,7 +94,7 @@ export default function DriverAuthScreen({
           <PrimaryButton disabled={submitting} onPress={handleLogin}>
             {submitting ? "확인 중..." : "기사 앱 시작"}
           </PrimaryButton>
-          <Text style={styles.helper}>데모: 1201 / {DRIVER_DEMO_PASSWORD}</Text>
+          <Text style={styles.helper}>관리자 승인 후 기사 앱을 사용할 수 있습니다.</Text>
         </Card>
       </ScrollView>
     </SafeAreaView>

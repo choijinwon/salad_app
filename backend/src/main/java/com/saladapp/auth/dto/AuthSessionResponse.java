@@ -1,32 +1,27 @@
-package com.saladapp.customer.dto;
+package com.saladapp.auth.dto;
 
 import com.saladapp.common.enums.UserRole;
 import com.saladapp.customer.Profile;
 
-import java.time.LocalDate;
 import java.util.UUID;
 
-public record CustomerResponse(
+public record AuthSessionResponse(
         UUID id,
         UserRole role,
         String name,
         String phone,
-        String email,
-        LocalDate birthdate,
         String address,
-        UUID zoneId,
+        String email,
         String uniqueCode
 ) {
-    public static CustomerResponse from(Profile profile) {
-        return new CustomerResponse(
+    public static AuthSessionResponse from(Profile profile) {
+        return new AuthSessionResponse(
                 profile.getId(),
                 profile.getRole(),
                 profile.getName(),
                 profile.getPhone(),
-                profile.getEmail(),
-                profile.getBirthdate(),
                 profile.getAddress(),
-                profile.getZoneId(),
+                profile.getEmail(),
                 profile.getUniqueCode()
         );
     }
