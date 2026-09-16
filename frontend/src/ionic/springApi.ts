@@ -12,7 +12,7 @@ function getDefaultApiBaseUrl() {
     return `${protocol}//${hostname}:8080/api`;
   }
 
-  return "";
+  return "/api";
 }
 
 export const SPRING_API_BASE_URL = (configuredApiBaseUrl ?? getDefaultApiBaseUrl()).replace(/\/$/, "");

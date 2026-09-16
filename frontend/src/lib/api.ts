@@ -10,7 +10,7 @@ function getDefaultBaseUrl() {
     return `${protocol}//${hostname}:8080/api`;
   }
 
-  return "";
+  return "/api";
 }
 
 export const API_BASE_URL =
