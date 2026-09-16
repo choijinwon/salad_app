@@ -165,6 +165,12 @@ public class DeliveryService {
         if (request.deliveryNotes() != null) {
             schedule.changeNotes(request.deliveryNotes());
         }
+        if (request.addressConfirmed() != null) {
+            schedule.confirmAddress(request.addressConfirmed());
+        }
+        if (request.orderPrepared() != null) {
+            schedule.prepareOrder(request.orderPrepared());
+        }
         return toResponse(schedule);
     }
 
@@ -207,6 +213,12 @@ public class DeliveryService {
         }
         if (request.deliveryNotes() != null) {
             schedule.changeNotes(request.deliveryNotes());
+        }
+        if (request.addressConfirmed() != null) {
+            schedule.confirmAddress(request.addressConfirmed());
+        }
+        if (request.orderPrepared() != null) {
+            schedule.prepareOrder(request.orderPrepared());
         }
         return toResponse(schedule);
     }

@@ -4,6 +4,8 @@ import java.time.LocalDate;
 
 public record UpdateDeliveryRequest(
         LocalDate deliveryDate,
-        String deliveryNotes
+        String deliveryNotes,
+        Boolean addressConfirmed,
+        Boolean orderPrepared
 ) {
 }

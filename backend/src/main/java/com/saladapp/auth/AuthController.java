@@ -1,6 +1,7 @@
 package com.saladapp.auth;
 
 import com.saladapp.auth.dto.AuthSessionResponse;
+import com.saladapp.auth.dto.AdminLoginRequest;
 import com.saladapp.auth.dto.CustomerLoginRequest;
 import com.saladapp.auth.dto.CustomerSignupRequest;
 import com.saladapp.auth.dto.DriverLoginRequest;
@@ -34,5 +35,10 @@ public class AuthController {
     @PostMapping("/driver/login")
     ApiResponse<AuthSessionResponse> loginDriver(@Valid @RequestBody DriverLoginRequest request) {
         return ApiResponse.ok(authService.loginDriver(request), "로그인되었습니다.");
+    }
+
+    @PostMapping("/admin/login")
+    ApiResponse<AuthSessionResponse> loginAdmin(@Valid @RequestBody AdminLoginRequest request) {
+        return ApiResponse.ok(authService.loginAdmin(request), "관리자 로그인되었습니다.");
     }
 }

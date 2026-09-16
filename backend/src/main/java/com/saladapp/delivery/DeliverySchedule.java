@@ -52,6 +52,12 @@ public class DeliverySchedule {
     @Column(name = "delivery_notes")
     private String deliveryNotes;
 
+    @Column(name = "address_confirmed", nullable = false)
+    private boolean addressConfirmed;
+
+    @Column(name = "order_prepared", nullable = false)
+    private boolean orderPrepared;
+
     @Column(name = "insulated_bag_returned", nullable = false)
     private boolean insulatedBagReturned;
 
@@ -86,6 +92,8 @@ public class DeliverySchedule {
         this.address = address;
         this.latitude = latitude;
         this.longitude = longitude;
+        this.addressConfirmed = false;
+        this.orderPrepared = false;
         this.insulatedBagReturned = false;
         this.createdAt = OffsetDateTime.now();
     }
@@ -96,6 +104,14 @@ public class DeliverySchedule {
 
     public void changeNotes(String deliveryNotes) {
         this.deliveryNotes = deliveryNotes;
+    }
+
+    public void confirmAddress(boolean addressConfirmed) {
+        this.addressConfirmed = addressConfirmed;
+    }
+
+    public void prepareOrder(boolean orderPrepared) {
+        this.orderPrepared = orderPrepared;
     }
 
     public void assignDriver(UUID driverId, UUID zoneId) {
@@ -168,6 +184,14 @@ public class DeliverySchedule {
 
     public String getDeliveryNotes() {
         return deliveryNotes;
+    }
+
+    public boolean isAddressConfirmed() {
+        return addressConfirmed;
+    }
+
+    public boolean isOrderPrepared() {
+        return orderPrepared;
     }
 
     public boolean isInsulatedBagReturned() {

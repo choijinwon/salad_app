@@ -1,6 +1,7 @@
 package com.saladapp.auth;
 
 import com.saladapp.auth.dto.AuthSessionResponse;
+import com.saladapp.auth.dto.AdminLoginRequest;
 import com.saladapp.auth.dto.CustomerLoginRequest;
 import com.saladapp.auth.dto.CustomerSignupRequest;
 import com.saladapp.auth.dto.DriverLoginRequest;
@@ -98,6 +99,17 @@ public class AuthService {
                 .orElse(false);
         if (!active) {
             throw new BusinessRuleException("관리자 승인 후 기사 앱을 사용할 수 있습니다.");
+        }
+        return AuthSessionResponse.from(profile);
+    }
+
+    @Transactional(readOnly = true)
+    public AuthSessionResponse loginAdmin(AdminLoginRequest request) {
+        Profile profile = profileRepository.findByEmailIgnoreCase(request.email().trim())
+                .filter(admin -> admin.getRole() == UserRole.ADMIN)
+                .orElseThrow(() -> new BusinessRuleException("관리자 이메일 또는 비밀번호가 올바르지 않습니다."));
+        if (profile.getPasswordHash() == null || !passwordEncoder.matches(request.password(), profile.getPasswordHash())) {
+            throw new BusinessRuleException("관리자 이메일 또는 비밀번호가 올바르지 않습니다.");
         }
         return AuthSessionResponse.from(profile);
     }

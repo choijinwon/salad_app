@@ -39,3 +39,10 @@ juso:
     enabled: ${JUSO_API_ENABLED:false}
     confm-key: ${JUSO_API_KEY:}
     base-url: ${JUSO_API_BASE_URL:https://business.juso.go.kr/addrlink/addrLinkApi.do}
+
+admin:
+  bootstrap:
+    enabled: ${ADMIN_BOOTSTRAP_ENABLED:false}
+    email: ${ADMIN_BOOTSTRAP_EMAIL:}
+    password: ${ADMIN_BOOTSTRAP_PASSWORD:}
+    name: ${ADMIN_BOOTSTRAP_NAME:샐러드 관리자}

@@ -39,18 +39,32 @@ import { useEffect, useMemo, useState } from "react";
 import {
   assignSpringDelivery,
   completeSpringDelivery,
+  createSpringAdminAccount,
+  createSpringAdminProduct,
+  createSpringDelivery,
   createSpringDriver,
+  createSpringManualCustomer,
+  createSpringNaverOrder,
+  createSpringZone,
+  loginSpringAdmin,
+  loadSpringAdminResources,
   loadSpringSnapshot,
   loginSpringCustomer,
   loginSpringDriver,
   searchSpringAddresses,
   signupSpringCustomer,
+  updateSpringAdminProduct,
+  updateSpringAdminOrder,
   updateSpringDeliveryBag,
   updateSpringDriver,
+  updateSpringNaverOrder,
+  type SpringAdminAccount,
+  type SpringAdminProduct,
   type SpringAddressItem,
   type SpringCustomer,
   type SpringDelivery,
   type SpringDriver,
+  type SpringNaverOrder,
   type SpringSnapshot,
   type SpringZone,
 } from "./springApi";
@@ -372,7 +386,7 @@ function mapSpringDeliveries(deliveries: SpringDelivery[], customers: SpringCust
     const customer = customers.find((item) => item.id === delivery.customerId);
     return {
       address: delivery.address,
-      addressConfirmed: true,
+      addressConfirmed: delivery.addressConfirmed,
       assignedDriver: delivery.driverName || null,
       bagCollected: delivery.insulatedBagReturned,
       bagCount: delivery.insulatedBagReturned ? 0 : 1,
@@ -387,7 +401,7 @@ function mapSpringDeliveries(deliveries: SpringDelivery[], customers: SpringCust
       lng: delivery.longitude ?? 127.03644,
       memo: delivery.requestNotes || "요청사항 없음",
       orderNo: `ORD-${delivery.deliveryDate.replace(/-/g, "")}-${String(index + 1).padStart(3, "0")}`,
-      orderPrepared: delivery.status !== "PENDING",
+      orderPrepared: delivery.orderPrepared,
       phone: customer?.phone ?? "",
       zone: delivery.zoneName || "미지정",
       zoneId: delivery.zoneId,
@@ -1029,8 +1043,14 @@ function AdminArea() {
   const [dispatchDeliveries, setDispatchDeliveries] = useState(() => readDispatchDeliveries());
   const [driverProfiles, setDriverProfiles] = useState(() => readDriverProfiles());
   const [deliveryZones, setDeliveryZones] = useState(() => readDeliveryZones());
+  const [springZones, setSpringZones] = useState<SpringZone[]>([]);
+  const [adminProducts, setAdminProducts] = useState<SpringAdminProduct[]>([]);
+  const [naverOrders, setNaverOrders] = useState<SpringNaverOrder[]>([]);
+  const [adminAccounts, setAdminAccounts] = useState<SpringAdminAccount[]>([]);
   const [menuCollapsed, setMenuCollapsed] = useState(false);
   const [newZoneName, setNewZoneName] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("전체");
   const [zoneAssignments, setZoneAssignments] = useState(() => readZoneAssignments());
   const approvedDrivers = driverProfiles.filter((driver) => driver.status === "승인 완료");
   const unassignedDeliveries = dispatchDeliveries.filter((delivery) => !delivery.assignedDriver);
@@ -1062,9 +1082,13 @@ function AdminArea() {
 
   function refreshSpringData() {
     setApiStatus("Spring API 연결 확인중");
-    loadSpringSnapshot()
-      .then((snapshot) => {
+    Promise.all([loadSpringSnapshot(), loadSpringAdminResources()])
+      .then(([snapshot, adminResources]) => {
         applySpringSnapshot(snapshot, setDispatchDeliveries, setDriverProfiles, setDeliveryZones, setZoneAssignments);
+        setSpringZones(snapshot.zones);
+        setAdminProducts(adminResources.products);
+        setNaverOrders(adminResources.naverOrders);
+        setAdminAccounts(adminResources.adminAccounts);
         setApiStatus("Spring API 연결됨");
       })
       .catch(() => {
@@ -1150,16 +1174,41 @@ function AdminArea() {
   }
 
   function assignZoneDriver(zone: string, driverName: string) {
+    const targetDriver = driverProfiles.find((driver) => driver.name === driverName);
+    const targetZone = springZones.find((item) => item.zoneName === zone);
     updateZoneAssignments({ ...zoneAssignments, [zone]: driverName });
+    updateDriverProfiles(
+      driverProfiles.map((driver) =>
+        driver.name === driverName ? { ...driver, zone, zoneId: targetZone?.id ?? driver.zoneId } : driver,
+      ),
+    );
+    if (isUuid(targetDriver?.id) && isUuid(targetZone?.id)) {
+      updateSpringDriver(targetDriver?.id ?? "", { zoneId: targetZone?.id ?? null })
+        .then(refreshSpringData)
+        .catch(() => setApiStatus("API 저장 실패 · 구역 담당 데모 반영"));
+    }
   }
 
-  function addDeliveryZone() {
-    const zone = newZoneName.trim();
+  async function addDeliveryZone() {
+    const zone = newZoneName.trim() || `신규구역 ${deliveryZones.length + 1}`;
     if (!zone || deliveryZones.includes(zone)) return;
 
     updateDeliveryZones([...deliveryZones, zone]);
     updateZoneAssignments({ ...zoneAssignments, [zone]: approvedDrivers[0]?.name ?? "" });
     setNewZoneName("");
+    try {
+      const createdZone = await createSpringZone({
+        zoneName: zone,
+        description: "관리자 웹에서 추가한 배송 구역",
+      });
+      const firstDriver = approvedDrivers[0];
+      if (firstDriver?.id && isUuid(firstDriver.id)) {
+        await updateSpringDriver(firstDriver.id, { zoneId: createdZone.id });
+      }
+      refreshSpringData();
+    } catch {
+      setApiStatus("API 저장 실패 · 구역 데모 반영");
+    }
   }
 
   function removeDeliveryZone(zone: string) {
@@ -1201,7 +1250,17 @@ function AdminArea() {
     updateDispatchDeliveries(
       dispatchDeliveries.map((delivery) => (delivery.id === deliveryId ? { ...delivery, ...patch } : delivery)),
     );
-    if (isUuid(deliveryId) && patch.done) {
+    if (
+      isUuid(deliveryId) &&
+      (patch.addressConfirmed !== undefined || patch.orderPrepared !== undefined)
+    ) {
+      updateSpringAdminOrder(deliveryId, {
+        addressConfirmed: patch.addressConfirmed,
+        orderPrepared: patch.orderPrepared,
+      })
+        .then(refreshSpringData)
+        .catch(() => setApiStatus("API 저장 실패 · 데모 반영"));
+    } else if (isUuid(deliveryId) && patch.done) {
       const current = dispatchDeliveries.find((delivery) => delivery.id === deliveryId);
       completeSpringDelivery(deliveryId, patch.bagCollected ?? current?.bagCollected ?? false)
         .then(refreshSpringData)
@@ -1217,6 +1276,227 @@ function AdminArea() {
     updateDispatchDeliveries(
       dispatchDeliveries.map((delivery) => (delivery.customer === customerName ? { ...delivery, ...patch } : delivery)),
     );
+    if (patch.addressConfirmed !== undefined) {
+      const targetIds = dispatchDeliveries
+        .filter((delivery) => delivery.customer === customerName && isUuid(delivery.id))
+        .map((delivery) => delivery.id);
+      if (targetIds.length > 0) {
+        Promise.all(
+          targetIds.map((deliveryId) =>
+            updateSpringAdminOrder(deliveryId, { addressConfirmed: patch.addressConfirmed }),
+          ),
+        )
+          .then(refreshSpringData)
+          .catch(() => setApiStatus("API 저장 실패 · 데모 반영"));
+      }
+    }
+  }
+
+  async function addAdminProduct() {
+    const nextNumber = adminProducts.length + 1;
+    try {
+      await createSpringAdminProduct({
+        name: `시즌 샐러드 ${nextNumber}`,
+        price: 9900,
+        status: "ACTIVE",
+        description: "관리자 웹에서 추가한 상품",
+        displayOrder: nextNumber + 10,
+        visible: true,
+      });
+      refreshSpringData();
+    } catch {
+      setApiStatus("API 저장 실패 · 상품 등록 실패");
+    }
+  }
+
+  async function toggleFirstProductStatus() {
+    const product = adminProducts[0];
+    if (!product) return;
+
+    try {
+      await updateSpringAdminProduct(product.id, {
+        name: product.name,
+        price: product.price,
+        status: product.status === "ACTIVE" ? "SOLD_OUT" : "ACTIVE",
+        description: product.description,
+        displayOrder: product.displayOrder,
+        visible: product.visible,
+      });
+      refreshSpringData();
+    } catch {
+      setApiStatus("API 저장 실패 · 상품 상태 변경 실패");
+    }
+  }
+
+  async function addNaverOrder() {
+    const timestamp = Date.now().toString().slice(-6);
+    try {
+      await createSpringNaverOrder({
+        naverOrderNo: `N-${timestamp}`,
+        customerName: "신규 네이버 고객",
+        phone: "010-0000-0000",
+        address: "서울특별시 강남구 테헤란로 100",
+        status: "NEEDS_CONFIRMATION",
+        deliveryDate: new Date().toISOString().slice(0, 10),
+      });
+      refreshSpringData();
+    } catch {
+      setApiStatus("API 저장 실패 · 네이버 주문 등록 실패");
+    }
+  }
+
+  async function linkNextNaverOrder() {
+    const order = naverOrders.find((item) => item.status === "NEEDS_CONFIRMATION") ?? naverOrders[0];
+    if (!order) return;
+
+    try {
+      await updateSpringNaverOrder(order.id, {
+        naverOrderNo: order.naverOrderNo,
+        customerName: order.customerName,
+        phone: order.phone,
+        address: order.address,
+        status: order.status === "RESERVED" ? "LINKED" : "RESERVED",
+        deliveryDate: order.deliveryDate,
+      });
+      refreshSpringData();
+    } catch {
+      setApiStatus("API 저장 실패 · 네이버 주문 변경 실패");
+    }
+  }
+
+  async function inviteAdminAccount() {
+    const timestamp = Date.now().toString().slice(-6);
+    try {
+      await createSpringAdminAccount({
+        name: `운영자 ${adminAccounts.length + 1}`,
+        email: `admin${timestamp}@salad.test`,
+        password: temporaryRegistrationPassword("admin"),
+        phone: "010-0000-0000",
+      });
+      refreshSpringData();
+    } catch {
+      setApiStatus("API 저장 실패 · 관리자 초대 실패");
+    }
+  }
+
+  function futureDate(offsetDays: number) {
+    const date = new Date();
+    date.setDate(date.getDate() + offsetDays);
+    return date.toISOString().slice(0, 10);
+  }
+
+  function temporaryRegistrationPassword(prefix: string) {
+    return `${prefix}-${Date.now().toString(36)}-Aa1!`;
+  }
+
+  async function registerCustomerWithSubscription() {
+    const zoneId = springZones[0]?.id;
+    if (!zoneId) {
+      setApiStatus("구역 API 데이터가 필요합니다.");
+      return null;
+    }
+    const timestamp = Date.now().toString().slice(-6);
+    try {
+      const registration = await createSpringManualCustomer({
+        name: `신규고객 ${dispatchDeliveries.length + 1}`,
+        phone: `010-${timestamp.slice(0, 2).padEnd(4, "0")}-${timestamp.slice(-4)}`,
+        email: `customer${timestamp}@salad.test`,
+        password: temporaryRegistrationPassword("customer"),
+        birthdate: "1990-01-01",
+        address: "서울특별시 강남구 테헤란로 100",
+        zoneId,
+        orderSource: "APP",
+        totalCount: 10,
+        unitPrice: 8900,
+        startDate: new Date().toISOString().slice(0, 10),
+      });
+      refreshSpringData();
+      return registration;
+    } catch {
+      setApiStatus("API 저장 실패 · 고객 등록 실패");
+      return null;
+    }
+  }
+
+  async function registerOrderDelivery() {
+    const registration = await registerCustomerWithSubscription();
+    if (!registration) return;
+    try {
+      await createSpringDelivery({
+        subscriptionId: registration.subscriptionId,
+        deliveryDate: futureDate(dispatchDeliveries.length + 1),
+      });
+      refreshSpringData();
+    } catch {
+      setApiStatus("API 저장 실패 · 배송 예약 실패");
+    }
+  }
+
+  async function registerDriverProfile() {
+    const timestamp = Date.now().toString().slice(-6);
+    try {
+      await createSpringDriver({
+        name: `신규기사 ${driverProfiles.length + 1}`,
+        password: temporaryRegistrationPassword("driver"),
+        phone: `010-8${timestamp.slice(0, 3)}-${timestamp.slice(-4)}`,
+        zoneId: springZones[0]?.id ?? null,
+        vehicleNumber: `${String(driverProfiles.length + 21).padStart(2, "0")}가${timestamp.slice(-4)}`,
+      });
+      refreshSpringData();
+    } catch {
+      setApiStatus("API 저장 실패 · 기사 등록 실패");
+    }
+  }
+
+  function handleNewRegistration() {
+    if (tab === "overview") {
+      processNextTask();
+      return;
+    }
+    if (tab === "customers") {
+      registerCustomerWithSubscription();
+      return;
+    }
+    if (tab === "orders") {
+      registerOrderDelivery();
+      return;
+    }
+    if (tab === "dispatch") {
+      addDeliveryZone();
+      return;
+    }
+    if (tab === "drivers") {
+      registerDriverProfile();
+      return;
+    }
+    if (tab === "bags") {
+      setTab("orders");
+      return;
+    }
+    if (tab === "products") {
+      addAdminProduct();
+      return;
+    }
+    if (tab === "naver") {
+      addNaverOrder();
+      return;
+    }
+    if (tab === "admins") {
+      inviteAdminAccount();
+    }
+  }
+
+  function primaryActionLabel() {
+    if (tab === "overview") return "다음 할 일";
+    if (tab === "customers") return "+ 고객 등록";
+    if (tab === "orders") return "+ 주문 등록";
+    if (tab === "dispatch") return "+ 구역 등록";
+    if (tab === "drivers") return "+ 기사 등록";
+    if (tab === "bags") return "주문 등록으로 이동";
+    if (tab === "products") return "+ 상품 등록";
+    if (tab === "naver") return "+ 네이버 주문";
+    if (tab === "admins") return "+ 관리자 초대";
+    return "+ 신규등록";
   }
 
   const content = useMemo(() => {
@@ -1316,12 +1596,19 @@ function AdminArea() {
       return {
         title: "상품 관리",
         subtitle: "샐러드 메뉴, 판매 상태, 기본 가격과 노출 여부를 관리합니다. 결제 기능은 제외합니다.",
-        metrics: [["판매중", "8개"], ["품절", "1개"], ["숨김", "2개"], ["오늘 인기", "닭가슴살"]],
-        rows: [
-          ["닭가슴살 샐러드", "8,900원 · 정기배송 기본 상품", "판매중"],
-          ["연어 샐러드", "11,900원 · 오전 배송 권장", "판매중"],
-          ["아보카도 샐러드", "10,900원 · 재료 확인 필요", "품절"],
+        metrics: [
+          ["전체", `${adminProducts.length}개`],
+          ["판매중", `${adminProducts.filter((product) => product.status === "ACTIVE").length}개`],
+          ["품절", `${adminProducts.filter((product) => product.status === "SOLD_OUT").length}개`],
+          ["숨김", `${adminProducts.filter((product) => product.status === "HIDDEN" || !product.visible).length}개`],
         ],
+        rows: adminProducts.length
+          ? adminProducts.map((product) => [
+              product.name,
+              `${product.price.toLocaleString()}원 · ${product.description ?? "설명 없음"}`,
+              productStatusLabel(product.status),
+            ])
+          : [["상품 없음", "상품 API 데이터를 불러오면 표시됩니다.", "대기"]],
         actions: ["상품 추가", "판매 상태 변경", "가격 수정", "앱 노출 순서 변경"],
       };
     }
@@ -1329,12 +1616,19 @@ function AdminArea() {
       return {
         title: "관리자 관리",
         subtitle: "운영자 계정 권한과 접근 범위를 웹에서 관리합니다.",
-        metrics: [["운영자", "3명"], ["초대 대기", "1명"], ["최근 로그인", "오늘"], ["권한 그룹", "4개"]],
-        rows: [
-          ["최고관리자", "전체 권한 · 계정/주문/기사 승인", "활성"],
-          ["운영 매니저", "주문/배송 배정 권한", "활성"],
-          ["CS 담당", "고객/요청사항 조회 권한", "초대 대기"],
+        metrics: [
+          ["운영자", `${adminAccounts.length}명`],
+          ["로그인 가능", `${adminAccounts.filter((account) => account.email).length}명`],
+          ["최근 추가", adminAccounts[0]?.name ?? "없음"],
+          ["권한 그룹", "운영자"],
         ],
+        rows: adminAccounts.length
+          ? adminAccounts.map((account) => [
+              account.name,
+              `${account.email ?? "이메일 없음"} · ${account.phone}`,
+              "활성",
+            ])
+          : [["관리자 없음", "관리자 API 데이터를 불러오면 표시됩니다.", "대기"]],
         actions: ["관리자 초대", "권한 수정", "접근 로그 확인", "계정 비활성화"],
       };
     }
@@ -1342,12 +1636,19 @@ function AdminArea() {
       return {
         title: "네이버 주문",
         subtitle: "네이버 주문을 고객 계정과 연결하고 배송 예약으로 전환합니다.",
-        metrics: [["수집 주문", "9건"], ["연결 완료", "6건"], ["확인 필요", "3건"], ["예약 전환", "5건"]],
-        rows: [
-          ["N-240912-01", "김샐러 · 주소 확인", "연결 완료"],
-          ["N-240912-02", "이로메인 · 전화 확인 필요", "확인 필요"],
-          ["N-240912-03", "신규 고객 · 회원 계정 연결 대기", "대기"],
+        metrics: [
+          ["수집 주문", `${naverOrders.length}건`],
+          ["연결 완료", `${naverOrders.filter((order) => order.status === "LINKED").length}건`],
+          ["확인 필요", `${naverOrders.filter((order) => order.status === "NEEDS_CONFIRMATION").length}건`],
+          ["예약 전환", `${naverOrders.filter((order) => order.status === "RESERVED").length}건`],
         ],
+        rows: naverOrders.length
+          ? naverOrders.map((order) => [
+              order.naverOrderNo,
+              `${order.customerName} · ${order.phone} · ${order.address}`,
+              naverStatusLabel(order.status),
+            ])
+          : [["네이버 주문 없음", "네이버 주문 API 데이터를 불러오면 표시됩니다.", "대기"]],
         actions: ["네이버 주문 가져오기", "고객 계정 연결", "배송 예약 생성", "주소/전화번호 확인"],
       };
     }
@@ -1368,7 +1669,20 @@ function AdminArea() {
       ],
       actions: ["다음 할 일 처리", "상세 관리 보기", "데모 초기화"],
     };
-  }, [assignedDeliveries, dispatchDeliveries, nextAddressCheck, nextBagCollect, nextDispatch, nextOrderPrepare, tab, unassignedDeliveries, zoneAssignments]);
+  }, [adminAccounts, adminProducts, assignedDeliveries, dispatchDeliveries, naverOrders, nextAddressCheck, nextBagCollect, nextDispatch, nextOrderPrepare, tab, unassignedDeliveries, zoneAssignments]);
+
+  const filteredRows = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    return content.rows.filter(([title, description, status]) => {
+      const matchesSearch = !normalizedSearch || `${title} ${description} ${status}`.toLowerCase().includes(normalizedSearch);
+      const matchesStatus =
+        statusFilter === "전체" ||
+        status.includes(statusFilter) ||
+        (statusFilter === "대기" && (status.includes("대기") || status.includes("확인"))) ||
+        (statusFilter === "완료" && (status.includes("완료") || status.includes("활성") || status.includes("판매중") || status.includes("연결 완료")));
+      return matchesSearch && matchesStatus;
+    });
+  }, [content.rows, searchTerm, statusFilter]);
 
   if (!loggedIn) {
     return <AdminLogin onLogin={() => setLoggedIn(true)} />;
@@ -1383,11 +1697,16 @@ function AdminArea() {
         onToggle={() => setMenuCollapsed((collapsed) => !collapsed)}
       />
       <main className="admin-console-main">
-        <AdminConsoleTopBar apiStatus={apiStatus} currentTitle={content.title} />
+        <AdminConsoleTopBar
+          apiStatus={apiStatus}
+          currentTitle={content.title}
+          onSearchTermChange={setSearchTerm}
+          searchTerm={searchTerm}
+        />
         <div className="admin-module-bar">
-          <button className="active" type="button">샐러드 운영</button>
-          <button type="button">고객/주문</button>
-          <button type="button">배송관리</button>
+          <button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")} type="button">셀러드 운영</button>
+          <button className={tab === "customers" || tab === "orders" ? "active" : ""} onClick={() => setTab("orders")} type="button">고객/주문</button>
+          <button className={tab === "dispatch" || tab === "drivers" || tab === "bags" ? "active" : ""} onClick={() => setTab("dispatch")} type="button">배송관리</button>
         </div>
         <section className="admin-page-panel">
           <div className="admin-breadcrumb">
@@ -1400,12 +1719,18 @@ function AdminArea() {
               <h1>{content.title}</h1>
               <p>{content.subtitle}</p>
             </div>
-            <IonButton onClick={() => (tab === "overview" ? processNextTask() : resetDispatchDemo())}>
-              {tab === "overview" ? "다음 할 일" : "+ 신규등록"}
+            <IonButton onClick={handleNewRegistration}>
+              {primaryActionLabel()}
             </IonButton>
           </div>
-          <AdminFilterPanel tab={tab} />
-          <AdminListPanel rows={content.rows} />
+          <AdminFilterPanel
+            onSearchTermChange={setSearchTerm}
+            onStatusFilterChange={setStatusFilter}
+            searchTerm={searchTerm}
+            statusFilter={statusFilter}
+            tab={tab}
+          />
+          <AdminListPanel rows={filteredRows} totalCount={content.rows.length} />
         <div className="admin-kpis">
           {content.metrics.map(([label, value]) => (
             <div className="admin-kpi" key={label}>
@@ -1548,6 +1873,28 @@ function AdminArea() {
                     </IonButton>
                     <IonButton expand="block" fill="outline" onClick={() => setTab("dispatch")}>배송 배정으로 이동</IonButton>
                     <IonButton expand="block" fill="outline" onClick={resetDispatchDemo}>데모 초기화</IonButton>
+                  </>
+                ) : tab === "products" ? (
+                  <>
+                    <IonButton expand="block" onClick={addAdminProduct}>상품 추가</IonButton>
+                    <IonButton disabled={adminProducts.length === 0} expand="block" fill="outline" onClick={toggleFirstProductStatus}>
+                      첫 상품 판매상태 변경
+                    </IonButton>
+                    <IonButton expand="block" fill="outline" onClick={refreshSpringData}>상품 API 새로고침</IonButton>
+                  </>
+                ) : tab === "naver" ? (
+                  <>
+                    <IonButton expand="block" onClick={addNaverOrder}>네이버 주문 가져오기</IonButton>
+                    <IonButton disabled={naverOrders.length === 0} expand="block" fill="outline" onClick={linkNextNaverOrder}>
+                      다음 주문 예약 전환
+                    </IonButton>
+                    <IonButton expand="block" fill="outline" onClick={() => setTab("orders")}>주문 관리로 이동</IonButton>
+                  </>
+                ) : tab === "admins" ? (
+                  <>
+                    <IonButton expand="block" onClick={inviteAdminAccount}>관리자 초대</IonButton>
+                    <IonButton expand="block" fill="outline" onClick={refreshSpringData}>관리자 계정 새로고침</IonButton>
+                    <IonButton expand="block" fill="outline" onClick={() => setTab("overview")}>운영 현황 보기</IonButton>
                   </>
                 ) : (
                   content.actions.map((action, index) => (
@@ -2016,6 +2363,28 @@ function DriverApprovalManagement({
 }
 
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
+  const [email, setEmail] = useState("admin@salad.test");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function submitAdminLogin() {
+    if (!email.trim() || !password.trim()) {
+      setMessage("관리자 이메일과 비밀번호를 입력해주세요.");
+      return;
+    }
+    setLoading(true);
+    setMessage("");
+    try {
+      await loginSpringAdmin({ email: email.trim(), password });
+      onLogin();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "관리자 로그인에 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="admin-login">
       <div className="admin-login-hero">
@@ -2032,15 +2401,16 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
       <IonCard className="admin-login-card">
         <IonCardHeader>
           <IonCardTitle>관리자 계정</IonCardTitle>
-          <IonCardSubtitle>데모에서는 이메일과 비밀번호 입력 후 로그인됩니다.</IonCardSubtitle>
+          <IonCardSubtitle>승인된 관리자 계정으로 로그인합니다.</IonCardSubtitle>
         </IonCardHeader>
         <IonCardContent>
-          <IonInput label="관리자 이메일" labelPlacement="stacked" placeholder="admin@salad.test" type="email" />
-          <IonInput label="비밀번호" labelPlacement="stacked" placeholder="비밀번호 입력" type="password" />
-          <IonButton expand="block" onClick={onLogin}>
+          <IonInput label="관리자 이메일" labelPlacement="stacked" placeholder="admin@salad.test" type="email" value={email} onIonInput={(event) => setEmail(String(event.detail.value ?? ""))} />
+          <IonInput label="비밀번호" labelPlacement="stacked" placeholder="비밀번호 입력" type="password" value={password} onIonInput={(event) => setPassword(String(event.detail.value ?? ""))} />
+          <IonButton disabled={loading} expand="block" onClick={submitAdminLogin}>
             <IonIcon icon={logInOutline} slot="start" />
-            관리자 로그인
+            {loading ? "확인 중..." : "관리자 로그인"}
           </IonButton>
+          {message && <IonChip color="warning">{message}</IonChip>}
           <div className="admin-login-note">권한: 주문 관리 · 배송 배정 · 기사 승인 · 고객 정보 관리</div>
         </IonCardContent>
       </IonCard>
@@ -2099,7 +2469,17 @@ function AdminConsoleSidebar({
   );
 }
 
-function AdminConsoleTopBar({ apiStatus, currentTitle }: { apiStatus: string; currentTitle: string }) {
+function AdminConsoleTopBar({
+  apiStatus,
+  currentTitle,
+  onSearchTermChange,
+  searchTerm,
+}: {
+  apiStatus: string;
+  currentTitle: string;
+  onSearchTermChange: (value: string) => void;
+  searchTerm: string;
+}) {
   return (
     <div className="admin-console-topbar">
       <div className="admin-topbar-title">
@@ -2108,7 +2488,11 @@ function AdminConsoleTopBar({ apiStatus, currentTitle }: { apiStatus: string; cu
       </div>
       <div className="admin-topbar-search">
         <IonIcon icon={searchOutline} />
-        <input placeholder="고객명, 주문번호, 기사명 검색" />
+        <input
+          onChange={(event) => onSearchTermChange(event.currentTarget.value)}
+          placeholder="고객명, 주문번호, 기사명 검색"
+          value={searchTerm}
+        />
       </div>
       <div className="admin-topbar-actions">
         <span className="admin-api-status">{apiStatus}</span>
@@ -2126,15 +2510,33 @@ function AdminConsoleTopBar({ apiStatus, currentTitle }: { apiStatus: string; cu
   );
 }
 
-function AdminFilterPanel({ tab }: { tab: AdminTab }) {
+function AdminFilterPanel({
+  onSearchTermChange,
+  onStatusFilterChange,
+  searchTerm,
+  statusFilter,
+  tab,
+}: {
+  onSearchTermChange: (value: string) => void;
+  onStatusFilterChange: (value: string) => void;
+  searchTerm: string;
+  statusFilter: string;
+  tab: AdminTab;
+}) {
   const label = tab === "overview" ? "업무명" : tab === "dispatch" ? "배송명" : tab === "drivers" ? "기사명" : tab === "bags" ? "고객명" : "검색명";
+  const filterOptions = ["전체", "대기", "확인 필요", "완료"];
 
   return (
     <div className="admin-filter-panel">
       <div className="admin-filter-row">
         <strong>검색옵션</strong>
-        {["전체", "대기", "확인 필요", "완료"].map((option, index) => (
-          <button className={index === 0 ? "checked" : ""} key={option} type="button">
+        {filterOptions.map((option) => (
+          <button
+            className={statusFilter === option ? "checked" : ""}
+            key={option}
+            onClick={() => onStatusFilterChange(option)}
+            type="button"
+          >
             <span />
             {option}
           </button>
@@ -2142,18 +2544,22 @@ function AdminFilterPanel({ tab }: { tab: AdminTab }) {
       </div>
       <div className="admin-filter-row">
         <strong>{label}</strong>
-        <button className="admin-select" type="button">전체</button>
-        <input placeholder="검색어를 입력해주세요." />
-        <button className="admin-search-button" type="button">검색</button>
+        <button className="admin-select" onClick={() => onStatusFilterChange("전체")} type="button">전체</button>
+        <input
+          onChange={(event) => onSearchTermChange(event.currentTarget.value)}
+          placeholder="검색어를 입력해주세요."
+          value={searchTerm}
+        />
+        <button className="admin-search-button" onClick={() => onSearchTermChange(searchTerm.trim())} type="button">검색</button>
       </div>
     </div>
   );
 }
 
-function AdminListPanel({ rows }: { rows: string[][] }) {
+function AdminListPanel({ rows, totalCount }: { rows: string[][]; totalCount: number }) {
   return (
     <div className="admin-list-panel">
-      <div className="admin-list-count">전체 {rows.length}건</div>
+      <div className="admin-list-count">전체 {totalCount}건 · 검색결과 {rows.length}건</div>
       <div className="admin-list-table">
         <div className="admin-list-head">
           <span>번호</span>
@@ -2202,6 +2608,21 @@ function adminBadgeColor(status: string) {
   if (status.includes("완료") || status.includes("활성") || status.includes("정상") || status.includes("판매중") || status.includes("준비 완료")) return "success";
   if (status.includes("보류") || status.includes("필요") || status.includes("대기") || status.includes("검토") || status.includes("품절") || status.includes("확인")) return "warning";
   return "medium";
+}
+
+function productStatusLabel(status: string) {
+  if (status === "ACTIVE") return "판매중";
+  if (status === "SOLD_OUT") return "품절";
+  if (status === "HIDDEN") return "숨김";
+  return status;
+}
+
+function naverStatusLabel(status: string) {
+  if (status === "LINKED") return "연결 완료";
+  if (status === "RESERVED") return "예약 전환";
+  if (status === "NEEDS_CONFIRMATION") return "확인 필요";
+  if (status === "CANCELLED") return "취소";
+  return status;
 }
 
 function customerStatus(delivery: Delivery) {
