@@ -42,3 +42,9 @@ yarn-error.log*
 /.wrangler/
 /outputs/
 /work/
+
+# Local Netlify folder
+.netlify
+
+# Local Gradle cache for sandboxed runs
+.gradle-cache
