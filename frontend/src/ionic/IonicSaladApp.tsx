@@ -196,6 +196,10 @@ const DISPATCH_STORAGE_KEY = "salad_dispatch_deliveries";
 const DRIVER_PROFILE_STORAGE_KEY = "salad_driver_profiles";
 const DELIVERY_ZONE_STORAGE_KEY = "salad_delivery_zones";
 const ZONE_ASSIGNMENT_STORAGE_KEY = "salad_zone_assignments";
+const CUSTOMER_SESSION_STORAGE_KEY = "salad_customer_session";
+const DRIVER_SESSION_STORAGE_KEY = "salad_driver_session";
+const ADMIN_SESSION_STORAGE_KEY = "salad_admin_session";
+const ADMIN_SESSION_TTL_MS = 1000 * 60 * 60 * 12;
 const customerMenuItems: SideMenuItem<CustomerTab>[] = [
   { icon: homeOutline, label: "홈", value: "home" },
   { icon: calendarOutline, label: "예약", value: "reserve" },
@@ -339,6 +343,81 @@ function saveZoneAssignments(assignments: ZoneAssignment) {
   window.dispatchEvent(new Event("salad-zone-updated"));
 }
 
+type StoredAppSession = {
+  address?: string | null;
+  email?: string | null;
+  expiresAt?: number;
+  name?: string;
+  phone?: string | null;
+  role?: string;
+};
+
+function readStoredSession(storageKey: string, role: "CUSTOMER" | "DRIVER" | "ADMIN") {
+  if (typeof window === "undefined") return null;
+  const saved = window.localStorage.getItem(storageKey);
+  if (!saved) return null;
+
+  try {
+    const session = JSON.parse(saved) as StoredAppSession;
+    if (session.role !== role || !session.expiresAt || session.expiresAt < Date.now()) {
+      window.localStorage.removeItem(storageKey);
+      return null;
+    }
+    return session;
+  } catch {
+    window.localStorage.removeItem(storageKey);
+    return null;
+  }
+}
+
+function saveStoredSession(storageKey: string, session: StoredAppSession) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(
+    storageKey,
+    JSON.stringify({
+      ...session,
+      expiresAt: Date.now() + ADMIN_SESSION_TTL_MS,
+    }),
+  );
+}
+
+function readCustomerSession() {
+  return readStoredSession(CUSTOMER_SESSION_STORAGE_KEY, "CUSTOMER");
+}
+
+function saveCustomerSession(session: { name: string; phone: string | null; address: string | null; email: string | null }) {
+  saveStoredSession(CUSTOMER_SESSION_STORAGE_KEY, {
+    address: session.address,
+    email: session.email,
+    name: session.name,
+    phone: session.phone,
+    role: "CUSTOMER",
+  });
+}
+
+function readDriverSession() {
+  return readStoredSession(DRIVER_SESSION_STORAGE_KEY, "DRIVER");
+}
+
+function saveDriverSession(session: { name: string; phone: string | null }) {
+  saveStoredSession(DRIVER_SESSION_STORAGE_KEY, {
+    name: session.name,
+    phone: session.phone,
+    role: "DRIVER",
+  });
+}
+
+function readAdminSession() {
+  return Boolean(readStoredSession(ADMIN_SESSION_STORAGE_KEY, "ADMIN"));
+}
+
+function saveAdminSession(email: string) {
+  saveStoredSession(ADMIN_SESSION_STORAGE_KEY, {
+    email,
+    role: "ADMIN",
+  });
+}
+
 function driverAssignedDeliveries(driverName: string) {
   return readDispatchDeliveries().filter((delivery) => delivery.assignedDriver === driverName);
 }
@@ -432,13 +511,14 @@ function applySpringSnapshot(
 }
 
 function CustomerArea() {
-  const [loggedIn, setLoggedIn] = useState(false);
+  const initialCustomerSession = readCustomerSession();
+  const [loggedIn, setLoggedIn] = useState(() => Boolean(initialCustomerSession));
   const [showSignup, setShowSignup] = useState(false);
   const [tab, setTab] = useState<CustomerTab>("home");
-  const [customerName, setCustomerName] = useState("김샐러");
-  const [phone, setPhone] = useState("010-1234-5678");
-  const [address, setAddress] = useState("서울 강남구 테헤란로 100");
-  const [email, setEmail] = useState("customer@salad.test");
+  const [customerName, setCustomerName] = useState(initialCustomerSession?.name ?? "김샐러");
+  const [phone, setPhone] = useState(initialCustomerSession?.phone ?? "010-1234-5678");
+  const [address, setAddress] = useState(initialCustomerSession?.address ?? "서울 강남구 테헤란로 100");
+  const [email, setEmail] = useState(initialCustomerSession?.email ?? "customer@salad.test");
   const [password, setPassword] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [addressKeyword, setAddressKeyword] = useState("");
@@ -459,6 +539,7 @@ function CustomerArea() {
     setPhone(session.phone ?? phone);
     setAddress(session.address ?? address);
     setEmail(session.email ?? email);
+    saveCustomerSession(session);
     setLoggedIn(true);
   }
 
@@ -696,11 +777,13 @@ function CustomerArea() {
 }
 
 function DriverArea() {
-  const [loggedIn, setLoggedIn] = useState(false);
+  const initialDriverSession = readDriverSession();
+  const initialDriverName = initialDriverSession?.name ?? readInitialDriverName();
+  const [loggedIn, setLoggedIn] = useState(() => Boolean(initialDriverSession));
   const [showApply, setShowApply] = useState(false);
   const [driverProfiles, setDriverProfiles] = useState(() => readDriverProfiles());
-  const [currentDriverName, setCurrentDriverName] = useState(() => readInitialDriverName());
-  const [driverPhone, setDriverPhone] = useState("");
+  const [currentDriverName, setCurrentDriverName] = useState(initialDriverName);
+  const [driverPhone, setDriverPhone] = useState(initialDriverSession?.phone ?? "");
   const [driverPassword, setDriverPassword] = useState("");
   const [applyName, setApplyName] = useState("신규기사");
   const [applyPhone, setApplyPhone] = useState("");
@@ -710,7 +793,7 @@ function DriverArea() {
   const [tab, setTab] = useState<DriverTab>("route");
   const [working, setWorking] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [deliveries, setDeliveries] = useState(() => driverAssignedDeliveries(readInitialDriverName()));
+  const [deliveries, setDeliveries] = useState(() => driverAssignedDeliveries(initialDriverName));
   const [notice, setNotice] = useState("");
   const approvedDrivers = driverProfiles.filter((driver) => driver.status === "승인 완료");
   const currentDriver = approvedDrivers.find((driver) => driver.name === currentDriverName) ?? approvedDrivers[0];
@@ -787,6 +870,7 @@ function DriverArea() {
       }
       const session = await loginSpringDriver({ phone: driverPhone.trim(), password: driverPassword });
       setCurrentDriverName(session.name);
+      saveDriverSession({ name: session.name, phone: session.phone });
       setLoggedIn(true);
       loadSpringSnapshot()
         .then((snapshot) => {
@@ -1037,7 +1121,7 @@ function googleMapsEmbedUrl(delivery: Delivery) {
 }
 
 function AdminArea() {
-  const [loggedIn, setLoggedIn] = useState(false);
+  const [loggedIn, setLoggedIn] = useState(() => readAdminSession());
   const [tab, setTab] = useState<AdminTab>("overview");
   const [apiStatus, setApiStatus] = useState("데모 데이터");
   const [dispatchDeliveries, setDispatchDeliveries] = useState(() => readDispatchDeliveries());
@@ -1685,7 +1769,10 @@ function AdminArea() {
   }, [content.rows, searchTerm, statusFilter]);
 
   if (!loggedIn) {
-    return <AdminLogin onLogin={() => setLoggedIn(true)} />;
+    return <AdminLogin onLogin={(email) => {
+      saveAdminSession(email);
+      setLoggedIn(true);
+    }} />;
   }
 
   return (
@@ -2362,7 +2449,7 @@ function DriverApprovalManagement({
   );
 }
 
-function AdminLogin({ onLogin }: { onLogin: () => void }) {
+function AdminLogin({ onLogin }: { onLogin: (email: string) => void }) {
   const [email, setEmail] = useState("admin@salad.test");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -2377,7 +2464,7 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
     setMessage("");
     try {
       await loginSpringAdmin({ email: email.trim(), password });
-      onLogin();
+      onLogin(email.trim());
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "관리자 로그인에 실패했습니다.");
     } finally {
