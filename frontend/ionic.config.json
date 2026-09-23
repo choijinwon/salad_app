@@ -1,0 +1,7 @@
+{
+  "name": "salad-delivery-ionic",
+  "type": "react",
+  "integrations": {
+    "capacitor": {}
+  }
+}

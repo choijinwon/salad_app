@@ -1,0 +1,50 @@
+services:
+  - type: web
+    name: salad-app-backend
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: DATABASE_HOST
+        fromDatabase:
+          name: salad-app-postgres
+          property: host
+      - key: DATABASE_PORT
+        fromDatabase:
+          name: salad-app-postgres
+          property: port
+      - key: DATABASE_NAME
+        fromDatabase:
+          name: salad-app-postgres
+          property: database
+      - key: DATABASE_USERNAME
+        fromDatabase:
+          name: salad-app-postgres
+          property: user
+      - key: DATABASE_PASSWORD
+        fromDatabase:
+          name: salad-app-postgres
+          property: password
+      - key: ADMIN_BOOTSTRAP_ENABLED
+        value: "true"
+      - key: ADMIN_BOOTSTRAP_EMAIL
+        value: admin@salad.test
+      - key: ADMIN_BOOTSTRAP_PASSWORD
+        sync: false
+      - key: ADMIN_BOOTSTRAP_NAME
+        value: 샐러드 관리자
+      - key: JUSO_API_ENABLED
+        value: "false"
+      - key: NAVER_API_ENABLED
+        value: "false"
+
+databases:
+  - name: salad-app-postgres
+    plan: free
+    region: singapore
+    databaseName: salad_app
+    user: salad_app
+    postgresMajorVersion: "17"

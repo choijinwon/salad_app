@@ -4,7 +4,7 @@
 
 ```text
 salad_app/
-├── frontend/   # React Native Expo Android/iOS 앱
+├── frontend/   # Ionic React + Capacitor 고객/기사 앱, 관리자 웹
 └── backend/    # Spring Boot API 서버 + PostgreSQL/Flyway
 ```
 
@@ -13,8 +13,9 @@ salad_app/
 ```bash
 cd frontend
 npm install
-npm run android
-npm run ios
+npm run serve:ionic
+npm run build:ionic
+npm run sync:ionic
 ```
 
 ## Backend
