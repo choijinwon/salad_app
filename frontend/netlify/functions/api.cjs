@@ -279,7 +279,7 @@ exports.handler = async function handler(event) {
   }
 
   if (path === "/auth/customer/login" && method === "POST") {
-    const loginId = body.loginId || body.email || body.phone;
+    const loginId = body.loginId || body.emailOrPhone || body.email || body.phone;
     const customer = state.customers.find(
       (item) => [item.email, item.phone, item.uniqueCode].includes(loginId) && item.password === body.password,
     );
