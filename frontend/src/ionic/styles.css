@@ -749,6 +749,10 @@ ion-card {
   min-height: 44px;
 }
 
+.kakao-address-button {
+  margin: 8px 0 2px;
+}
+
 .address-search-results {
   margin-top: 10px;
 }
@@ -867,7 +871,10 @@ ion-card {
 .driver-header-actions {
   align-items: center;
   display: flex;
-  gap: 10px;
+  flex: 0 0 auto;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-left: 12px;
 }
 
 .driver-header-actions button {
@@ -877,15 +884,17 @@ ion-card {
   color: #475467;
   cursor: pointer;
   display: flex;
-  font-size: 34px;
   font-weight: 800;
-  height: 46px;
+  height: 42px;
   justify-content: center;
-  width: 46px;
+  line-height: 1;
+  padding: 0;
+  width: 42px;
 }
 
 .driver-header-actions ion-icon {
-  font-size: 24px;
+  display: block;
+  font-size: 26px;
 }
 
 .driver-date-tabs {
@@ -951,13 +960,50 @@ ion-card {
 }
 
 .driver-filter-tabs button {
+  align-items: center;
   border-radius: 10px;
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 8px;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .driver-filter-tabs button.active {
   background: #ffffff;
   box-shadow: 0 3px 9px rgba(16, 24, 40, 0.14);
   color: #155eef;
+}
+
+.driver-filter-tabs button small {
+  background: #eef4ff;
+  border-radius: 999px;
+  color: #155eef;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  padding: 4px 6px;
+}
+
+.driver-map-mode .driver-filter-tabs button {
+  font-size: 13px;
+  gap: 4px;
+  letter-spacing: 0;
+  padding: 0 5px;
+}
+
+.driver-map-mode .driver-filter-tabs button small {
+  font-size: 10px;
+  padding: 3px 5px;
+}
+
+.driver-filter-tabs button.active small {
+  background: #155eef;
+  color: #ffffff;
 }
 
 .driver-toast {
@@ -1077,8 +1123,37 @@ ion-card {
 }
 
 .driver-delivery-list {
+  background: transparent;
   display: grid;
   gap: 18px;
+  padding: 0;
+}
+
+.driver-delivery-list ion-reorder-group {
+  display: grid;
+  gap: 18px;
+}
+
+.driver-delivery-reorder-item {
+  --background: transparent;
+  --border-color: transparent;
+  --inner-border-width: 0;
+  --inner-padding-end: 0;
+  --min-height: 0;
+  --padding-end: 0;
+  --padding-start: 0;
+  overflow: visible;
+}
+
+.driver-delivery-reorder-item::part(native) {
+  overflow: visible;
+}
+
+.driver-card-sort-row {
+  align-items: start;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) 34px;
 }
 
 .driver-delivery-card {
@@ -1089,10 +1164,74 @@ ion-card {
   display: grid;
   gap: 18px;
   padding: 18px;
+  width: 100%;
 }
 
 .driver-delivery-card.selected {
   border-color: #155eef;
+}
+
+.driver-delivery-card.locked {
+  background: #fbfcfd;
+}
+
+.driver-reorder-handle {
+  align-items: center;
+  align-self: start;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  color: #475467;
+  cursor: grab;
+  display: block;
+  height: 44px;
+  line-height: 1;
+  margin-top: 4px;
+  min-height: 44px;
+  position: relative;
+  width: 34px;
+}
+
+.driver-reorder-handle:active {
+  cursor: grabbing;
+}
+
+.driver-reorder-handle.locked {
+  background: #ecfdf3;
+  border: 1px solid #abefc6;
+  color: #067647;
+  cursor: default;
+  display: flex;
+  height: 34px;
+  justify-content: center;
+  margin-top: 9px;
+  min-height: 34px;
+  width: 34px;
+}
+
+.driver-reorder-handle.locked ion-icon {
+  font-size: 20px;
+}
+
+.driver-reorder-grip {
+  align-content: center;
+  display: grid;
+  gap: 4px;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+}
+
+.driver-reorder-grip i {
+  background: #667085;
+  border-radius: 999px;
+  display: block;
+  height: 2px;
+  width: 18px;
+}
+
+.driver-reorder-handle:active .driver-reorder-grip i {
+  background: #155eef;
 }
 
 .driver-address-row {
@@ -2829,6 +2968,19 @@ ion-card {
     padding-inline: 10px;
   }
 
+  .driver-map-mode .driver-date-control {
+    grid-template-columns: 32px minmax(0, 1fr) 32px;
+  }
+
+  .driver-map-mode .driver-date-control label {
+    font-size: 13px;
+    gap: 4px;
+  }
+
+  .driver-map-mode .driver-date-control input {
+    font-size: 13px;
+  }
+
   .driver-map-stage {
     margin-inline: -10px;
   }
@@ -2894,5 +3046,25 @@ ion-card {
   .zone-shape {
     height: 92px;
     width: 126px;
+  }
+}
+
+@media (max-width: 380px) {
+  .driver-map-mode .driver-date-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .driver-map-mode .driver-date-control,
+  .driver-map-mode .driver-filter-tabs {
+    min-height: 44px;
+  }
+
+  .driver-map-mode .driver-filter-tabs button {
+    font-size: 12px;
+  }
+
+  .driver-map-mode .driver-filter-tabs button small {
+    font-size: 9px;
+    padding: 3px 4px;
   }
 }

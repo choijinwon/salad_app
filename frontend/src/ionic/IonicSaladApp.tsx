@@ -17,8 +17,11 @@ import {
   IonLabel,
   IonList,
   IonPage,
+  IonReorder,
+  IonReorderGroup,
   IonTextarea,
 } from "@ionic/react";
+import type { ItemReorderEventDetail } from "@ionic/core";
 import {
   bagCheckOutline,
   calendarOutline,
@@ -35,6 +38,7 @@ import {
   mapOutline,
   notificationsOutline,
   personCircleOutline,
+  refreshOutline,
   searchOutline,
   settingsOutline,
 } from "ionicons/icons";
@@ -121,6 +125,8 @@ type DriverProfile = {
 type ZoneAssignment = Record<string, string>;
 
 const initialDeliveryZones = ["강남A", "서초B", "송파C", "잠실D", "마포E", "성수F"];
+const demoTodayDate = todayInputValue();
+const demoTomorrowDate = addDaysToInputDate(demoTodayDate, 1);
 
 const initialDeliveries: Delivery[] = [
   {
@@ -143,7 +149,7 @@ const initialDeliveries: Delivery[] = [
     bagCount: 1,
     bagCollected: false,
     done: false,
-    deliveryDate: "2026-07-06",
+    deliveryDate: demoTodayDate,
     saladCount: 2,
   },
   {
@@ -166,7 +172,7 @@ const initialDeliveries: Delivery[] = [
     bagCount: 1,
     bagCollected: false,
     done: false,
-    deliveryDate: "2026-07-06",
+    deliveryDate: demoTodayDate,
     saladCount: 1,
   },
   {
@@ -189,7 +195,7 @@ const initialDeliveries: Delivery[] = [
     bagCount: 0,
     bagCollected: true,
     done: false,
-    deliveryDate: "2026-07-06",
+    deliveryDate: demoTodayDate,
     saladCount: 3,
   },
   {
@@ -212,7 +218,7 @@ const initialDeliveries: Delivery[] = [
     bagCount: 2,
     bagCollected: false,
     done: false,
-    deliveryDate: "2026-07-06",
+    deliveryDate: demoTodayDate,
     saladCount: 2,
   },
   {
@@ -235,7 +241,7 @@ const initialDeliveries: Delivery[] = [
     bagCount: 1,
     bagCollected: false,
     done: false,
-    deliveryDate: "2026-07-06",
+    deliveryDate: demoTodayDate,
     saladCount: 4,
   },
   {
@@ -258,8 +264,31 @@ const initialDeliveries: Delivery[] = [
     bagCount: 1,
     bagCollected: false,
     done: false,
-    deliveryDate: "2026-07-06",
+    deliveryDate: demoTodayDate,
     saladCount: 2,
+  },
+  {
+    id: "delivery-gn-007",
+    orderNo: "ORD-0914-007",
+    customer: "윤샐러리",
+    phone: "010-7777-5566",
+    email: "celery.yoon@example.com",
+    address: "서울특별시 강남구 압구정로 165",
+    detailAddress: "현대백화점 별관 3층",
+    memo: "내일 배송 예정 고객",
+    driverMemo: "",
+    zone: "강남A",
+    assignedDriver: "박배송",
+    addressConfirmed: true,
+    customerActive: true,
+    orderPrepared: true,
+    lat: 37.52713,
+    lng: 127.02761,
+    bagCount: 1,
+    bagCollected: false,
+    done: false,
+    deliveryDate: demoTomorrowDate,
+    saladCount: 1,
   },
   {
     id: "delivery-002",
@@ -281,7 +310,7 @@ const initialDeliveries: Delivery[] = [
     bagCount: 0,
     bagCollected: true,
     done: false,
-    deliveryDate: "2026-07-06",
+    deliveryDate: demoTodayDate,
     saladCount: 1,
   },
   {
@@ -304,7 +333,7 @@ const initialDeliveries: Delivery[] = [
     bagCount: 1,
     bagCollected: false,
     done: false,
-    deliveryDate: "2026-07-06",
+    deliveryDate: demoTodayDate,
     saladCount: 3,
   },
 ];
@@ -473,7 +502,7 @@ function normalizeDelivery(delivery: Delivery) {
     ...delivery,
     addressConfirmed: delivery.addressConfirmed ?? fallback?.addressConfirmed ?? false,
     customerActive: delivery.customerActive ?? fallback?.customerActive ?? true,
-    deliveryDate: delivery.deliveryDate ?? fallback?.deliveryDate ?? todayInputValue(),
+    deliveryDate: normalizeDemoDeliveryDate(delivery.deliveryDate ?? fallback?.deliveryDate ?? todayInputValue()),
     detailAddress: delivery.detailAddress ?? fallback?.detailAddress ?? delivery.address,
     driverMemo: delivery.driverMemo ?? fallback?.driverMemo ?? "",
     email: delivery.email ?? fallback?.email ?? "",
@@ -481,6 +510,12 @@ function normalizeDelivery(delivery: Delivery) {
     phone: delivery.phone ?? fallback?.phone ?? "",
     saladCount: delivery.saladCount ?? fallback?.saladCount ?? 1,
   };
+}
+
+function normalizeDemoDeliveryDate(deliveryDate: string) {
+  if (deliveryDate === "2026-07-06") return demoTodayDate;
+  if (deliveryDate === "2026-07-07") return demoTomorrowDate;
+  return deliveryDate;
 }
 
 function saveDispatchDeliveries(deliveries: Delivery[]) {
@@ -728,6 +763,100 @@ function isUuid(value?: string | null) {
   return Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value));
 }
 
+type KakaoPostcodeData = {
+  address?: string;
+  addressType?: string;
+  bname?: string;
+  buildingName?: string;
+  jibunAddress?: string;
+  roadAddress?: string;
+  zonecode?: string;
+};
+
+type KakaoPostcodeConstructor = new (options: { oncomplete: (data: KakaoPostcodeData) => void }) => {
+  open: () => void;
+};
+
+type KakaoPostcodeWindow = Window & {
+  __saladPostcodeLoader?: Promise<void>;
+  daum?: {
+    Postcode?: KakaoPostcodeConstructor;
+  };
+  kakao?: {
+    Postcode?: KakaoPostcodeConstructor;
+  };
+};
+
+function loadKakaoPostcodeSdk() {
+  const targetWindow = window as KakaoPostcodeWindow;
+  if (targetWindow.daum?.Postcode || targetWindow.kakao?.Postcode) {
+    return Promise.resolve();
+  }
+
+  if (targetWindow.__saladPostcodeLoader) {
+    return targetWindow.__saladPostcodeLoader;
+  }
+
+  targetWindow.__saladPostcodeLoader = new Promise<void>((resolve, reject) => {
+    const script = document.createElement("script");
+    let settled = false;
+    const fail = (message: string) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      delete targetWindow.__saladPostcodeLoader;
+      script.remove();
+      reject(new Error(message));
+    };
+    const timeoutId = window.setTimeout(() => fail("카카오 주소찾기 로딩 시간이 초과되었습니다."), 5000);
+
+    script.async = true;
+    script.onerror = () => fail("카카오 주소찾기 스크립트를 불러오지 못했습니다.");
+    script.onload = () => {
+      if (!(targetWindow.daum?.Postcode || targetWindow.kakao?.Postcode)) {
+        fail("카카오 주소찾기 객체를 찾을 수 없습니다.");
+        return;
+      }
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      resolve();
+    };
+    script.src = "https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js";
+    document.head.appendChild(script);
+  });
+
+  return targetWindow.__saladPostcodeLoader;
+}
+
+async function openKakaoPostcode(
+  onSelect: (address: string, data: KakaoPostcodeData) => void,
+  onError: (message: string) => void,
+) {
+  try {
+    await loadKakaoPostcodeSdk();
+    const targetWindow = window as KakaoPostcodeWindow;
+    const Postcode = targetWindow.daum?.Postcode ?? targetWindow.kakao?.Postcode;
+    if (!Postcode) {
+      onError("카카오 주소찾기를 열 수 없습니다.");
+      return;
+    }
+
+    new Postcode({
+      oncomplete: (data) => {
+        const nextAddress = data.roadAddress || data.address || data.jibunAddress || "";
+        if (!nextAddress) {
+          onError("선택된 주소를 확인할 수 없습니다.");
+          return;
+        }
+        onSelect(nextAddress, data);
+      },
+    }).open();
+  } catch (error) {
+    onError(error instanceof Error ? error.message : "카카오 주소찾기에 실패했습니다.");
+  }
+}
+
 function applySpringSnapshot(
   snapshot: SpringSnapshot,
   setDispatchDeliveries: (deliveries: Delivery[]) => void,
@@ -843,6 +972,18 @@ function CustomerArea() {
     flash("주소가 입력되었습니다. 상세주소는 내 정보에서 보완해주세요.");
   }
 
+  function openCustomerKakaoPostcode() {
+    openKakaoPostcode(
+      (nextAddress, data) => {
+        setAddress(nextAddress);
+        setAddressKeyword("");
+        setAddressResults([]);
+        flash(`${data.zonecode ? `${data.zonecode} · ` : ""}카카오 주소가 입력되었습니다.`);
+      },
+      flash,
+    );
+  }
+
   if (!loggedIn) {
     return (
       <ScreenShell
@@ -861,6 +1002,10 @@ function CustomerArea() {
                 <IonInput label="이름" labelPlacement="stacked" value={customerName} onIonInput={(e) => setCustomerName(String(e.detail.value ?? ""))} />
                 <IonInput label="전화번호" labelPlacement="stacked" value={phone} onIonInput={(e) => setPhone(String(e.detail.value ?? ""))} />
                 <IonInput label="주소" labelPlacement="stacked" value={address} onIonInput={(e) => setAddress(String(e.detail.value ?? ""))} />
+                <IonButton className="kakao-address-button" fill="outline" expand="block" onClick={openCustomerKakaoPostcode}>
+                  <IonIcon slot="start" icon={searchOutline} />
+                  카카오 주소찾기
+                </IonButton>
                 <div className="address-search-row">
                   <IonInput
                     label="주소 검색"
@@ -1016,6 +1161,10 @@ function CustomerArea() {
               <IonInput label="이름" labelPlacement="stacked" value={customerName} onIonInput={(e) => setCustomerName(String(e.detail.value ?? ""))} />
               <IonInput label="전화번호" labelPlacement="stacked" value={phone} onIonInput={(e) => setPhone(String(e.detail.value ?? ""))} />
               <IonInput label="주소" labelPlacement="stacked" value={address} onIonInput={(e) => setAddress(String(e.detail.value ?? ""))} />
+              <IonButton className="kakao-address-button" fill="outline" expand="block" onClick={openCustomerKakaoPostcode}>
+                <IonIcon slot="start" icon={searchOutline} />
+                카카오 주소찾기
+              </IonButton>
               <IonInput label="이메일" labelPlacement="stacked" value={email} onIonInput={(e) => setEmail(String(e.detail.value ?? ""))} />
               <IonButton expand="block" onClick={() => flash("내 정보가 저장되었습니다.")}>내 정보 저장</IonButton>
             </IonCardContent>
@@ -1043,7 +1192,7 @@ function DriverArea() {
   const [tab, setTab] = useState<DriverTab>("map");
   const [working, setWorking] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [selectedDate, setSelectedDate] = useState("2026-07-06");
+  const [selectedDate, setSelectedDate] = useState(() => todayInputValue());
   const [routeFilter, setRouteFilter] = useState<"all" | "today">("today");
   const [deliveries, setDeliveries] = useState(() => driverAssignedDeliveries(initialDriverName));
   const [notice, setNotice] = useState("");
@@ -1051,6 +1200,8 @@ function DriverArea() {
   const currentDriver = approvedDrivers.find((driver) => driver.name === currentDriverName) ?? approvedDrivers[0];
   const visibleDeliveries = deliveries.filter((delivery) => routeFilter === "all" || (delivery.deliveryDate ?? selectedDate) === selectedDate);
   const selected = visibleDeliveries[selectedIndex] ?? visibleDeliveries[0];
+  const todayDeliveryCount = deliveries.filter((delivery) => (delivery.deliveryDate ?? selectedDate) === selectedDate).length;
+  const allDeliveryCount = deliveries.length;
 
   const completedCount = visibleDeliveries.filter((delivery) => delivery.done).length;
   const bagRequired = visibleDeliveries.reduce((total, delivery) => total + delivery.bagCount, 0);
@@ -1099,6 +1250,12 @@ function DriverArea() {
   function flash(message: string) {
     setNotice(message);
     window.setTimeout(() => setNotice(""), 1800);
+  }
+
+  function changeRouteFilter(nextFilter: "all" | "today") {
+    setRouteFilter(nextFilter);
+    setSelectedIndex(0);
+    flash(nextFilter === "today" ? `오늘의 배송 ${todayDeliveryCount}건을 표시합니다.` : `전체 고객 ${allDeliveryCount}건을 표시합니다.`);
   }
 
   function logoutDriver() {
@@ -1190,6 +1347,61 @@ function DriverArea() {
     if (selected) updateDeliveryById(selected.id, patch);
   }
 
+  function reorderVisibleDeliveries(from: number, to: number) {
+    if (from === to || from < 0 || to < 0 || from >= visibleDeliveries.length || to >= visibleDeliveries.length) return;
+    if (visibleDeliveries[from]?.done) {
+      flash("완료된 배송은 순서를 변경할 수 없습니다.");
+      return;
+    }
+
+    const selectedDeliveryId = visibleDeliveries[selectedIndex]?.id;
+    const reorderableSlots = visibleDeliveries
+      .map((delivery, index) => (delivery.done ? -1 : index))
+      .filter((index) => index >= 0);
+    const fromOrderIndex = reorderableSlots.indexOf(from);
+    if (fromOrderIndex < 0) {
+      flash("완료된 배송은 순서를 변경할 수 없습니다.");
+      return;
+    }
+
+    const reorderedPending = reorderableSlots.map((index) => visibleDeliveries[index]);
+    const [moved] = reorderedPending.splice(fromOrderIndex, 1);
+    const toOrderIndex = reorderableSlots.filter((index) => index < to).length;
+    reorderedPending.splice(toOrderIndex, 0, moved);
+
+    let pendingIndex = 0;
+    const reorderedVisible = visibleDeliveries.map((delivery) => {
+      if (delivery.done) return delivery;
+      const nextDelivery = reorderedPending[pendingIndex] ?? delivery;
+      pendingIndex += 1;
+      return nextDelivery;
+    });
+
+    const visibleIds = new Set(visibleDeliveries.map((delivery) => delivery.id));
+    let nextVisibleIndex = 0;
+    const nextDriverDeliveries = deliveries.map((delivery) => {
+      if (!visibleIds.has(delivery.id)) return delivery;
+      const nextDelivery = reorderedVisible[nextVisibleIndex] ?? delivery;
+      nextVisibleIndex += 1;
+      return nextDelivery;
+    });
+
+    setDeliveries(nextDriverDeliveries);
+    setSelectedIndex(Math.max(0, reorderedVisible.findIndex((delivery) => delivery.id === selectedDeliveryId)));
+
+    const storedDeliveries = readDispatchDeliveries();
+    const nextById = new Map(nextDriverDeliveries.map((delivery) => [delivery.id, delivery]));
+    const orderedDriverIds = nextDriverDeliveries.map((delivery) => delivery.id);
+    let nextDriverIndex = 0;
+    saveDispatchDeliveries(storedDeliveries.map((delivery) => {
+      if (!nextById.has(delivery.id)) return delivery;
+      const nextId = orderedDriverIds[nextDriverIndex] ?? delivery.id;
+      nextDriverIndex += 1;
+      return nextById.get(nextId) ?? delivery;
+    }));
+    flash("배송 순서가 변경되었습니다.");
+  }
+
   async function copyText(label: string, value?: string) {
     if (!value) {
       flash(`${label} 정보가 없습니다.`);
@@ -1267,8 +1479,22 @@ function DriverArea() {
           </button>
         </div>
         <div className="driver-filter-tabs">
-          <button className={routeFilter === "all" ? "active" : ""} onClick={() => setRouteFilter("all")} type="button">전체 고객</button>
-          <button className={routeFilter === "today" ? "active" : ""} onClick={() => setRouteFilter("today")} type="button">오늘의 배송</button>
+          <button
+            aria-pressed={routeFilter === "all"}
+            className={routeFilter === "all" ? "active" : ""}
+            onClick={() => changeRouteFilter("all")}
+            type="button"
+          >
+            전체 고객 <small>{allDeliveryCount}</small>
+          </button>
+          <button
+            aria-pressed={routeFilter === "today"}
+            className={routeFilter === "today" ? "active" : ""}
+            onClick={() => changeRouteFilter("today")}
+            type="button"
+          >
+            오늘의 배송 <small>{todayDeliveryCount}</small>
+          </button>
         </div>
       </div>
 
@@ -1310,6 +1536,7 @@ function DriverArea() {
               }}
               onCopy={copyText}
               onMemo={writeDriverMemo}
+              onReorder={reorderVisibleDeliveries}
               onSelect={(index) => {
                 setSelectedIndex(index);
                 setTab("map");
@@ -1412,7 +1639,9 @@ function DriverWorkHeader({
         </div>
       </div>
       <div className="driver-header-actions">
-        <button aria-label="새로고침" onClick={onRefresh} type="button">↻</button>
+        <button aria-label="새로고침" onClick={onRefresh} type="button">
+          <IonIcon icon={refreshOutline} />
+        </button>
         <button aria-label="로그아웃" onClick={onLogout} type="button">
           <IonIcon icon={logOutOutline} />
         </button>
@@ -1482,6 +1711,7 @@ function DriverDeliveryList({
   onComplete,
   onCopy,
   onMemo,
+  onReorder,
   onSelect,
   selectedIndex,
 }: {
@@ -1490,6 +1720,7 @@ function DriverDeliveryList({
   onComplete: (delivery: Delivery) => void;
   onCopy: (label: string, value?: string) => void;
   onMemo: (delivery: Delivery) => void;
+  onReorder: (from: number, to: number) => void;
   onSelect: (index: number) => void;
   selectedIndex: number;
 }) {
@@ -1504,16 +1735,42 @@ function DriverDeliveryList({
     );
   }
 
+  function handleReorder(event: CustomEvent<ItemReorderEventDetail>) {
+    onReorder(event.detail.from, event.detail.to);
+    event.detail.complete();
+  }
+
   return (
-    <div className="driver-delivery-list">
+    <IonList className="driver-delivery-list">
+      <IonReorderGroup disabled={false} onIonItemReorder={handleReorder}>
       {deliveries.map((delivery, index) => (
-        <article className={index === selectedIndex ? "driver-delivery-card selected" : "driver-delivery-card"} key={delivery.id}>
+        <IonItem className="driver-delivery-reorder-item" key={delivery.id} lines="none">
+        <article className={[
+          "driver-delivery-card",
+          index === selectedIndex ? "selected" : "",
+          delivery.done ? "locked" : "",
+        ].filter(Boolean).join(" ")}>
+          <div className="driver-card-sort-row">
           <button className="driver-address-row" onClick={() => onCopy("도로명 주소", delivery.address)} type="button">
             <span>{index + 1}</span>
             <strong>{delivery.address}</strong>
             <IonIcon icon={copyOutline} />
             <small>터치하여 도로명 주소 복사</small>
           </button>
+            {delivery.done ? (
+              <div className="driver-reorder-handle locked" aria-label="완료되어 순서 고정" title="완료되어 순서 고정">
+                <IonIcon icon={checkmarkCircleOutline} />
+              </div>
+            ) : (
+              <IonReorder className="driver-reorder-handle" aria-label="배송 순서 이동" title="배송 순서 이동">
+                <span className="driver-reorder-grip" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+              </IonReorder>
+            )}
+          </div>
 
           <div className="driver-customer-box">
             <div className="driver-customer-line">
@@ -1553,8 +1810,10 @@ function DriverDeliveryList({
             </div>
           </div>
         </article>
+        </IonItem>
       ))}
-    </div>
+      </IonReorderGroup>
+    </IonList>
   );
 }
 
@@ -1708,10 +1967,23 @@ function loadKakaoMapSdk(appKey: string) {
 
   targetWindow.__saladKakaoMapLoader = new Promise<void>((resolve, reject) => {
     const script = document.createElement("script");
+    let settled = false;
+    const timeoutId = window.setTimeout(() => {
+      clearFailedLoader(`Kakao 지도 로딩 시간이 초과되었습니다. 현재 도메인 ${window.location.origin}을 Kakao Developers Web 플랫폼에 등록해주세요.`);
+    }, 4500);
     const clearFailedLoader = (message: string) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
       delete targetWindow.__saladKakaoMapLoader;
       script.remove();
       reject(new Error(message));
+    };
+    const finishLoader = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      resolve();
     };
 
     script.async = true;
@@ -1722,7 +1994,7 @@ function loadKakaoMapSdk(appKey: string) {
         clearFailedLoader("Kakao 지도 객체를 찾을 수 없습니다.");
         return;
       }
-      kakao.maps.load(resolve);
+      kakao.maps.load(finishLoader);
     };
     script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(appKey)}&autoload=false`;
     document.head.appendChild(script);
