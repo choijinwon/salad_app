@@ -31,6 +31,54 @@ const state = {
       uniqueCode: "박그8811034409",
       password: "customer123!",
     },
+    {
+      id: "customer-3",
+      role: "CUSTOMER",
+      name: "최루꼴라",
+      phone: "010-8123-7744",
+      birthdate: null,
+      address: "서울시 서대문구 연희로 41",
+      zoneId: "zone-a",
+      email: "rucola@salad.test",
+      uniqueCode: "최루9001017744",
+      password: "customer123!",
+    },
+    {
+      id: "customer-4",
+      role: "CUSTOMER",
+      name: "이비타민",
+      phone: "010-4432-7710",
+      birthdate: null,
+      address: "서울시 마포구 독막로 88",
+      zoneId: "zone-b",
+      email: "vitamin@salad.test",
+      uniqueCode: "이비9207077710",
+      password: "customer123!",
+    },
+    {
+      id: "customer-5",
+      role: "CUSTOMER",
+      name: "한케일",
+      phone: "010-7741-2200",
+      birthdate: null,
+      address: "서울시 강남구 테헤란로 152",
+      zoneId: "zone-c",
+      email: "kale@salad.test",
+      uniqueCode: "한케8803142200",
+      password: "customer123!",
+    },
+    {
+      id: "customer-6",
+      role: "CUSTOMER",
+      name: "오드레싱",
+      phone: "010-1199-8842",
+      birthdate: null,
+      address: "서울시 서초구 서초대로 77",
+      zoneId: "zone-c",
+      email: "dressing@salad.test",
+      uniqueCode: "오드9505028842",
+      password: "customer123!",
+    },
   ],
   drivers: [
     {
@@ -62,6 +110,36 @@ const state = {
       vehicleNumber: "서울45다 1203",
       isActive: false,
       approvalStatus: "PENDING",
+    },
+    {
+      id: "driver-4",
+      name: "이새벽",
+      phone: "010-3000-1204",
+      password: "driver123!",
+      zoneId: "zone-a",
+      vehicleNumber: "서울51라 7781",
+      isActive: true,
+      approvalStatus: "APPROVED",
+    },
+    {
+      id: "driver-5",
+      name: "최샐러",
+      phone: "010-3000-1205",
+      password: "driver123!",
+      zoneId: "zone-b",
+      vehicleNumber: "서울64마 3382",
+      isActive: true,
+      approvalStatus: "APPROVED",
+    },
+    {
+      id: "driver-6",
+      name: "한배송",
+      phone: "010-3000-1206",
+      password: "driver123!",
+      zoneId: "zone-c",
+      vehicleNumber: "서울77바 9106",
+      isActive: true,
+      approvalStatus: "APPROVED",
     },
   ],
   deliveries: [
@@ -125,6 +203,69 @@ const state = {
       orderPrepared: false,
       insulatedBagReturned: false,
       unitPrice: 9900,
+      completedAt: null,
+      canceledAt: null,
+    },
+    {
+      id: "delivery-4",
+      subscriptionId: "subscription-4",
+      customerId: "customer-4",
+      customerName: "이비타민",
+      driverId: "driver-4",
+      zoneId: "zone-a",
+      deliveryDate: today,
+      status: "PENDING",
+      routeOrder: 1,
+      address: "서울시 마포구 독막로 88",
+      latitude: 37.5486,
+      longitude: 126.9218,
+      requestNotes: "오전 8시 전 문 앞 배송",
+      addressConfirmed: true,
+      orderPrepared: true,
+      insulatedBagReturned: false,
+      unitPrice: 8900,
+      completedAt: null,
+      canceledAt: null,
+    },
+    {
+      id: "delivery-5",
+      subscriptionId: "subscription-5",
+      customerId: "customer-5",
+      customerName: "한케일",
+      driverId: "driver-5",
+      zoneId: "zone-b",
+      deliveryDate: today,
+      status: "PENDING",
+      routeOrder: 1,
+      address: "서울시 강남구 테헤란로 152",
+      latitude: 37.5007,
+      longitude: 127.0364,
+      requestNotes: "로비 보냉함에 넣어주세요",
+      addressConfirmed: true,
+      orderPrepared: true,
+      insulatedBagReturned: false,
+      unitPrice: 9900,
+      completedAt: null,
+      canceledAt: null,
+    },
+    {
+      id: "delivery-6",
+      subscriptionId: "subscription-6",
+      customerId: "customer-6",
+      customerName: "오드레싱",
+      driverId: "driver-6",
+      zoneId: "zone-c",
+      deliveryDate: today,
+      status: "PENDING",
+      routeOrder: 1,
+      address: "서울시 서초구 서초대로 77",
+      latitude: 37.4948,
+      longitude: 127.0179,
+      requestNotes: "문 앞에 기존 보냉백 회수",
+      addressConfirmed: true,
+      orderPrepared: true,
+      insulatedBagReturned: false,
+      unitPrice: 8900,
       completedAt: null,
       canceledAt: null,
     },
@@ -208,6 +349,10 @@ function readBody(event) {
 
 function id(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function normalizePhone(value) {
+  return String(value || "").replace(/\D/g, "");
 }
 
 function apiPath(event) {
@@ -305,7 +450,11 @@ exports.handler = async function handler(event) {
   }
 
   if (path === "/auth/driver/login" && method === "POST") {
-    const driver = state.drivers.find((item) => item.phone === body.phone && item.password === body.password);
+    const phone = normalizePhone(body.phone);
+    if (!phone) return fail(401, "기사 전화번호 또는 비밀번호가 올바르지 않습니다.");
+    const driver = state.drivers.find(
+      (item) => normalizePhone(item.phone).endsWith(phone) && item.password === body.password,
+    );
     if (!driver) return fail(401, "기사 전화번호 또는 비밀번호가 올바르지 않습니다.");
     if (driver.approvalStatus !== "APPROVED") return fail(403, "관리자 승인 후 로그인할 수 있습니다.");
     return ok(session(driver, "DRIVER"), "기사 로그인되었습니다.");

@@ -1,18 +1,29 @@
 const viteEnv = import.meta.env as Record<string, string | undefined>;
 
 const configuredApiBaseUrl = viteEnv.VITE_API_BASE_URL ?? viteEnv.EXPO_PUBLIC_API_BASE_URL;
+const productionApiBaseUrl = "https://saltest1.netlify.app/api";
+
+function isNativeApp() {
+  if (typeof window === "undefined") return false;
+  const nativeWindow = window as typeof window & {
+    Capacitor?: {
+      isNativePlatform?: () => boolean;
+    };
+  };
+
+  return nativeWindow.Capacitor?.isNativePlatform?.() === true;
+}
 
 function getDefaultApiBaseUrl() {
   if (typeof window === "undefined") {
-    return "http://127.0.0.1:8080/api";
+    return productionApiBaseUrl;
   }
 
-  const { hostname, protocol } = window.location;
-  if (hostname === "localhost" || hostname === "127.0.0.1") {
-    return `${protocol}//${hostname}:8080/api`;
+  if (isNativeApp()) {
+    return productionApiBaseUrl;
   }
 
-  return "/api";
+  return productionApiBaseUrl;
 }
 
 export const SPRING_API_BASE_URL = (configuredApiBaseUrl ?? getDefaultApiBaseUrl()).replace(/\/$/, "");

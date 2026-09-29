@@ -1,8 +1,24 @@
 const env = import.meta.env as Record<string, string | undefined>;
+const productionApiBaseUrl = "https://saltest1.netlify.app/api";
+
+function isNativeApp() {
+  if (typeof window === "undefined") return false;
+  const nativeWindow = window as typeof window & {
+    Capacitor?: {
+      isNativePlatform?: () => boolean;
+    };
+  };
+
+  return nativeWindow.Capacitor?.isNativePlatform?.() === true;
+}
 
 function getDefaultBaseUrl() {
   if (typeof window === "undefined") {
     return "http://127.0.0.1:8080/api";
+  }
+
+  if (isNativeApp()) {
+    return productionApiBaseUrl;
   }
 
   const { hostname, protocol } = window.location;

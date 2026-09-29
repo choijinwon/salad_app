@@ -16,6 +16,20 @@ npm run build:ionic
 npm run sync:ionic
 ```
 
+고객/기사 APK를 별도로 만들 때는 빌드 변수를 나눠서 사용합니다.
+
+```bash
+VITE_APP_VARIANT=customer VITE_API_BASE_URL=https://saltest1.netlify.app/api npm run build
+npm run icons:customer
+APP_VARIANT=customer npx cap sync android
+APP_VARIANT=customer ./android/gradlew -p android assembleDebug
+
+VITE_APP_VARIANT=driver VITE_API_BASE_URL=https://saltest1.netlify.app/api npm run build
+npm run icons:driver
+APP_VARIANT=driver npx cap sync android
+APP_VARIANT=driver ./android/gradlew -p android assembleDebug
+```
+
 ## iOS / Android 열기
 
 ```bash
