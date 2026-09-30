@@ -16,18 +16,18 @@ npm run build:ionic
 npm run sync:ionic
 ```
 
-고객/기사 APK를 별도로 만들 때는 빌드 변수를 나눠서 사용합니다.
+고객/기사 APK를 별도로 만들 때는 아래 명령을 사용합니다. 두 APK는 앱 ID가 달라서 한 기기에 각각 따로 설치됩니다.
 
 ```bash
-VITE_APP_VARIANT=customer VITE_API_BASE_URL=https://saltest1.netlify.app/api npm run build
-npm run icons:customer
-APP_VARIANT=customer npx cap sync android
-APP_VARIANT=customer ./android/gradlew -p android assembleDebug
+npm run apk:customer
+npm run apk:driver
+```
 
-VITE_APP_VARIANT=driver VITE_API_BASE_URL=https://saltest1.netlify.app/api npm run build
-npm run icons:driver
-APP_VARIANT=driver npx cap sync android
-APP_VARIANT=driver ./android/gradlew -p android assembleDebug
+결과 파일:
+
+```bash
+android/app/build/outputs/apk/debug/salad-customer-debug.apk
+android/app/build/outputs/apk/debug/salad-driver-debug.apk
 ```
 
 ## iOS / Android 열기

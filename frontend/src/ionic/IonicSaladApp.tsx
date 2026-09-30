@@ -58,7 +58,6 @@ import {
   loadSpringSnapshot,
   loginSpringCustomer,
   loginSpringDriver,
-  searchSpringAddresses,
   signupSpringCustomer,
   updateSpringAdminProduct,
   updateSpringAdminOrder,
@@ -67,7 +66,6 @@ import {
   updateSpringNaverOrder,
   type SpringAdminAccount,
   type SpringAdminProduct,
-  type SpringAddressItem,
   type SpringCustomer,
   type SpringDelivery,
   type SpringDriver,
@@ -123,6 +121,12 @@ type DriverProfile = {
 };
 
 type ZoneAssignment = Record<string, string>;
+type ZoneRangeConfig = Record<string, { color?: string; points: number[][] }>;
+type RegionZonePreset = {
+  name: string;
+  description: string;
+  zones: Array<{ name: string; color: string; districts?: string[]; points: number[][] }>;
+};
 
 const initialDeliveryZones = ["강남A", "서초B", "송파C", "잠실D", "마포E", "성수F"];
 const demoTodayDate = todayInputValue();
@@ -359,6 +363,7 @@ const DISPATCH_STORAGE_KEY = "salad_dispatch_deliveries";
 const DRIVER_PROFILE_STORAGE_KEY = "salad_driver_profiles";
 const DELIVERY_ZONE_STORAGE_KEY = "salad_delivery_zones";
 const ZONE_ASSIGNMENT_STORAGE_KEY = "salad_zone_assignments";
+const ZONE_RANGE_STORAGE_KEY = "salad_zone_ranges";
 const CUSTOMER_SESSION_STORAGE_KEY = "salad_customer_session";
 const DRIVER_SESSION_STORAGE_KEY = "salad_driver_session";
 const ADMIN_SESSION_STORAGE_KEY = "salad_admin_session";
@@ -580,8 +585,50 @@ function saveZoneAssignments(assignments: ZoneAssignment) {
   window.dispatchEvent(new Event("salad-zone-updated"));
 }
 
+function readZoneRanges(): ZoneRangeConfig {
+  if (typeof window === "undefined") return {};
+
+  const saved = window.localStorage.getItem(ZONE_RANGE_STORAGE_KEY);
+  if (!saved) return {};
+
+  try {
+    const parsed = JSON.parse(saved) as ZoneRangeConfig;
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([, config]) => Array.isArray(config.points) && config.points.length >= 3),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function saveZoneRanges(ranges: ZoneRangeConfig) {
+  window.localStorage.setItem(ZONE_RANGE_STORAGE_KEY, JSON.stringify(ranges));
+}
+
+function formatZonePoints(points: number[][]) {
+  return points.map(([lat, lng]) => `${lat.toFixed(6)}, ${lng.toFixed(6)}`).join("\n");
+}
+
+function parseZonePoints(text: string) {
+  const points = text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [latText, lngText] = line.split(/[,\s]+/).filter(Boolean);
+      const lat = Number(latText);
+      const lng = Number(lngText);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      return [lat, lng];
+    })
+    .filter((point): point is number[] => Boolean(point));
+
+  return points.length >= 3 ? points : null;
+}
+
 type StoredAppSession = {
   address?: string | null;
+  detailAddress?: string | null;
   email?: string | null;
   expiresAt?: number;
   name?: string;
@@ -623,13 +670,29 @@ function clearStoredSession(storageKey: string) {
   window.localStorage.removeItem(storageKey);
 }
 
-function readCustomerSession() {
-  return readStoredSession(CUSTOMER_SESSION_STORAGE_KEY, "CUSTOMER");
+function isLegacySampleCustomerSession(session: StoredAppSession) {
+  return (
+    session.name === "김샐러" &&
+    session.phone === "010-1234-5678" &&
+    Boolean(session.address?.startsWith("서울 강남구 테헤란로 100")) &&
+    (session.detailAddress === undefined || session.detailAddress === "101동 1201호") &&
+    session.email === "customer@salad.test"
+  );
 }
 
-function saveCustomerSession(session: { name: string; phone: string | null; address: string | null; email: string | null }) {
+function readCustomerSession() {
+  const session = readStoredSession(CUSTOMER_SESSION_STORAGE_KEY, "CUSTOMER");
+  if (session && isLegacySampleCustomerSession(session)) {
+    clearStoredSession(CUSTOMER_SESSION_STORAGE_KEY);
+    return null;
+  }
+  return session;
+}
+
+function saveCustomerSession(session: { name: string; phone: string | null; address: string | null; detailAddress?: string | null; email: string | null }) {
   saveStoredSession(CUSTOMER_SESSION_STORAGE_KEY, {
     address: session.address,
+    detailAddress: session.detailAddress,
     email: session.email,
     name: session.name,
     phone: session.phone,
@@ -658,6 +721,10 @@ function saveAdminSession(email: string) {
     email,
     role: "ADMIN",
   });
+}
+
+function combineAddress(address: string, detailAddress: string) {
+  return [address.trim(), detailAddress.trim()].filter(Boolean).join(" ");
 }
 
 function driverAssignedDeliveries(driverName: string) {
@@ -880,18 +947,16 @@ function CustomerArea() {
   const [loggedIn, setLoggedIn] = useState(() => Boolean(initialCustomerSession));
   const [showSignup, setShowSignup] = useState(false);
   const [tab, setTab] = useState<CustomerTab>("home");
-  const [customerName, setCustomerName] = useState(initialCustomerSession?.name ?? "김샐러");
-  const [phone, setPhone] = useState(initialCustomerSession?.phone ?? "010-1234-5678");
-  const [address, setAddress] = useState(initialCustomerSession?.address ?? "서울 강남구 테헤란로 100");
-  const [email, setEmail] = useState(initialCustomerSession?.email ?? "customer@salad.test");
+  const [customerName, setCustomerName] = useState(initialCustomerSession?.name ?? "");
+  const [phone, setPhone] = useState(initialCustomerSession?.phone ?? "");
+  const [address, setAddress] = useState(initialCustomerSession?.address ?? "");
+  const [detailAddress, setDetailAddress] = useState(initialCustomerSession?.detailAddress ?? "");
+  const [email, setEmail] = useState(initialCustomerSession?.email ?? "");
   const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
-  const [addressKeyword, setAddressKeyword] = useState("");
-  const [addressResults, setAddressResults] = useState<SpringAddressItem[]>([]);
-  const [addressSource, setAddressSource] = useState("");
-  const [addressLoading, setAddressLoading] = useState(false);
   const [selectedDays, setSelectedDays] = useState([2, 9, 16]);
-  const [request, setRequest] = useState("공동현관 1234*, 문 앞에 놓아주세요.");
+  const [request, setRequest] = useState("");
   const [notice, setNotice] = useState("");
 
   function flash(message: string) {
@@ -899,18 +964,20 @@ function CustomerArea() {
     window.setTimeout(() => setNotice(""), 1800);
   }
 
-  function applyCustomerSession(session: { name: string; phone: string | null; address: string | null; email: string | null }) {
+  function applyCustomerSession(session: { name: string; phone: string | null; address: string | null; detailAddress?: string | null; email: string | null }) {
     setCustomerName(session.name);
     setPhone(session.phone ?? phone);
     setAddress(session.address ?? address);
+    setDetailAddress(session.detailAddress ?? detailAddress);
     setEmail(session.email ?? email);
-    saveCustomerSession(session);
+    saveCustomerSession({ ...session, detailAddress: session.detailAddress ?? detailAddress });
     setLoggedIn(true);
   }
 
   function logoutCustomer() {
     clearStoredSession(CUSTOMER_SESSION_STORAGE_KEY);
     setPassword("");
+    setPasswordConfirm("");
     setLoggedIn(false);
     flash("로그아웃되었습니다.");
   }
@@ -924,19 +991,24 @@ function CustomerArea() {
       flash("이름, 전화번호, 주소를 모두 입력해주세요.");
       return;
     }
+    if (showSignup && password !== passwordConfirm) {
+      flash("비밀번호가 일치하지 않습니다.");
+      return;
+    }
 
     setAuthLoading(true);
     try {
       const session = showSignup
         ? await signupSpringCustomer({
-            address: address.trim(),
+            address: combineAddress(address, detailAddress),
             email: email.trim(),
             name: customerName.trim(),
             password,
             phone: phone.trim(),
           })
         : await loginSpringCustomer({ loginId: email.trim(), password });
-      applyCustomerSession(session);
+      applyCustomerSession({ ...session, address: session.address ?? address.trim(), detailAddress });
+      setPasswordConfirm("");
     } catch (error) {
       flash(error instanceof Error ? error.message : "로그인 처리에 실패했습니다.");
     } finally {
@@ -944,40 +1016,10 @@ function CustomerArea() {
     }
   }
 
-  async function submitAddressSearch() {
-    if (addressKeyword.trim().length < 2) {
-      flash("주소 검색어를 2글자 이상 입력해주세요.");
-      return;
-    }
-
-    setAddressLoading(true);
-    try {
-      const result = await searchSpringAddresses(addressKeyword.trim());
-      setAddressResults(result.addresses);
-      setAddressSource(result.source === "JUSO" ? "도로명주소 API" : "데모 주소");
-      if (result.addresses.length === 0) {
-        flash("검색 결과가 없습니다.");
-      }
-    } catch (error) {
-      flash(error instanceof Error ? error.message : "주소 검색에 실패했습니다.");
-    } finally {
-      setAddressLoading(false);
-    }
-  }
-
-  function selectAddress(item: SpringAddressItem) {
-    setAddress(item.roadAddress || item.jibunAddress);
-    setAddressKeyword("");
-    setAddressResults([]);
-    flash("주소가 입력되었습니다. 상세주소는 내 정보에서 보완해주세요.");
-  }
-
   function openCustomerKakaoPostcode() {
     openKakaoPostcode(
       (nextAddress, data) => {
         setAddress(nextAddress);
-        setAddressKeyword("");
-        setAddressResults([]);
         flash(`${data.zonecode ? `${data.zonecode} · ` : ""}카카오 주소가 입력되었습니다.`);
       },
       flash,
@@ -999,53 +1041,46 @@ function CustomerArea() {
           <IonCardContent>
             {showSignup && (
               <>
-                <IonInput label="이름" labelPlacement="stacked" value={customerName} onIonInput={(e) => setCustomerName(String(e.detail.value ?? ""))} />
-                <IonInput label="전화번호" labelPlacement="stacked" value={phone} onIonInput={(e) => setPhone(String(e.detail.value ?? ""))} />
-                <IonInput label="주소" labelPlacement="stacked" value={address} onIonInput={(e) => setAddress(String(e.detail.value ?? ""))} />
+                <IonInput label="이름" labelPlacement="stacked" placeholder="이름 입력" value={customerName} onIonInput={(e) => setCustomerName(String(e.detail.value ?? ""))} />
+                <IonInput label="전화번호" labelPlacement="stacked" placeholder="010-0000-0000" value={phone} onIonInput={(e) => setPhone(String(e.detail.value ?? ""))} />
+                <IonInput label="주소" labelPlacement="stacked" placeholder="주소찾기로 입력" value={address} onIonInput={(e) => setAddress(String(e.detail.value ?? ""))} />
+                <IonInput
+                  label="상세 주소"
+                  labelPlacement="stacked"
+                  placeholder="동/호수, 건물명, 출입 위치"
+                  value={detailAddress}
+                  onIonInput={(e) => setDetailAddress(String(e.detail.value ?? ""))}
+                />
                 <IonButton className="kakao-address-button" fill="outline" expand="block" onClick={openCustomerKakaoPostcode}>
                   <IonIcon slot="start" icon={searchOutline} />
                   카카오 주소찾기
                 </IonButton>
-                <div className="address-search-row">
-                  <IonInput
-                    label="주소 검색"
-                    labelPlacement="stacked"
-                    placeholder="예: 테헤란로 123"
-                    value={addressKeyword}
-                    onIonInput={(e) => setAddressKeyword(String(e.detail.value ?? ""))}
-                  />
-                  <IonButton fill="outline" disabled={addressLoading} onClick={submitAddressSearch}>
-                    <IonIcon slot="start" icon={searchOutline} />
-                    {addressLoading ? "검색중" : "검색"}
-                  </IonButton>
-                </div>
-                {addressResults.length > 0 && (
-                  <IonList className="address-search-results" inset>
-                    {addressSource && (
-                      <IonItem lines="none">
-                        <IonLabel color="medium">{addressSource}</IonLabel>
-                      </IonItem>
-                    )}
-                    {addressResults.map((item) => (
-                      <IonItem button detail={false} key={`${item.zipNo}-${item.roadAddress}`} onClick={() => selectAddress(item)}>
-                        <IonLabel>
-                          <h2>{item.roadAddress}</h2>
-                          <p>{item.jibunAddress}</p>
-                          <p>{item.zipNo} · {item.detailHint || "상세주소 입력 필요"}</p>
-                        </IonLabel>
-                      </IonItem>
-                    ))}
-                  </IonList>
-                )}
               </>
             )}
-            <IonInput label="이메일" labelPlacement="stacked" value={email} onIonInput={(e) => setEmail(String(e.detail.value ?? ""))} />
+            <IonInput label="이메일" labelPlacement="stacked" placeholder="email@example.com" value={email} onIonInput={(e) => setEmail(String(e.detail.value ?? ""))} />
             <IonInput label="비밀번호" labelPlacement="stacked" placeholder="비밀번호 입력" type="password" value={password} onIonInput={(e) => setPassword(String(e.detail.value ?? ""))} />
+            {showSignup && (
+              <IonInput
+                label="비밀번호 확인"
+                labelPlacement="stacked"
+                placeholder="비밀번호 다시 입력"
+                type="password"
+                value={passwordConfirm}
+                onIonInput={(e) => setPasswordConfirm(String(e.detail.value ?? ""))}
+              />
+            )}
             <IonButton expand="block" disabled={authLoading} onClick={submitCustomerAuth}>
               <IonIcon slot="start" icon={logInOutline} />
               {authLoading ? "확인 중..." : showSignup ? "가입하고 시작" : "로그인"}
             </IonButton>
-            <IonButton fill="clear" expand="block" onClick={() => setShowSignup(!showSignup)}>
+            <IonButton
+              fill="clear"
+              expand="block"
+              onClick={() => {
+                setShowSignup(!showSignup);
+                setPasswordConfirm("");
+              }}
+            >
               {showSignup ? "로그인으로 돌아가기" : "회원가입"}
             </IonButton>
             {notice && <IonChip color="warning">{notice}</IonChip>}
@@ -1072,7 +1107,7 @@ function CustomerArea() {
         <SummaryCard
           rows={[
             ["이번 주 배송", selectedDays.map((day) => `${day}일`).join(" · ")],
-            ["배송 주소", shortAddress(address)],
+            ["배송 주소", shortAddress(combineAddress(address, detailAddress))],
             ["요청사항", request.includes("문 앞") ? "문 앞 배송" : "요청 저장"],
           ]}
         />
@@ -1134,7 +1169,7 @@ function CustomerArea() {
                   })}
                 </div>
               </div>
-              <IonTextarea label="요청사항" labelPlacement="stacked" value={request} onIonInput={(e) => setRequest(String(e.detail.value ?? ""))} />
+              <IonTextarea label="요청사항" labelPlacement="stacked" placeholder="출입 방법, 문 앞 요청사항 등을 입력하세요." value={request} onIonInput={(e) => setRequest(String(e.detail.value ?? ""))} />
               <IonButton expand="block" onClick={() => flash("예약이 저장되었습니다.")}>
                 예약 저장
               </IonButton>
@@ -1158,15 +1193,30 @@ function CustomerArea() {
               <IonCardTitle>내 정보</IonCardTitle>
             </IonCardHeader>
             <IonCardContent>
-              <IonInput label="이름" labelPlacement="stacked" value={customerName} onIonInput={(e) => setCustomerName(String(e.detail.value ?? ""))} />
-              <IonInput label="전화번호" labelPlacement="stacked" value={phone} onIonInput={(e) => setPhone(String(e.detail.value ?? ""))} />
-              <IonInput label="주소" labelPlacement="stacked" value={address} onIonInput={(e) => setAddress(String(e.detail.value ?? ""))} />
+              <IonInput label="이름" labelPlacement="stacked" placeholder="이름 입력" value={customerName} onIonInput={(e) => setCustomerName(String(e.detail.value ?? ""))} />
+              <IonInput label="전화번호" labelPlacement="stacked" placeholder="010-0000-0000" value={phone} onIonInput={(e) => setPhone(String(e.detail.value ?? ""))} />
+              <IonInput label="주소" labelPlacement="stacked" placeholder="주소찾기로 입력" value={address} onIonInput={(e) => setAddress(String(e.detail.value ?? ""))} />
+              <IonInput
+                label="상세 주소"
+                labelPlacement="stacked"
+                placeholder="동/호수, 건물명, 출입 위치"
+                value={detailAddress}
+                onIonInput={(e) => setDetailAddress(String(e.detail.value ?? ""))}
+              />
               <IonButton className="kakao-address-button" fill="outline" expand="block" onClick={openCustomerKakaoPostcode}>
                 <IonIcon slot="start" icon={searchOutline} />
                 카카오 주소찾기
               </IonButton>
-              <IonInput label="이메일" labelPlacement="stacked" value={email} onIonInput={(e) => setEmail(String(e.detail.value ?? ""))} />
-              <IonButton expand="block" onClick={() => flash("내 정보가 저장되었습니다.")}>내 정보 저장</IonButton>
+              <IonInput label="이메일" labelPlacement="stacked" placeholder="email@example.com" value={email} onIonInput={(e) => setEmail(String(e.detail.value ?? ""))} />
+              <IonButton
+                expand="block"
+                onClick={() => {
+                  saveCustomerSession({ name: customerName, phone, address, detailAddress, email });
+                  flash("내 정보가 저장되었습니다.");
+                }}
+              >
+                내 정보 저장
+              </IonButton>
             </IonCardContent>
           </IonCard>
         )}
@@ -1957,11 +2007,25 @@ type KakaoMapsWindow = Window & {
 
 function loadKakaoMapSdk(appKey: string) {
   const targetWindow = window as KakaoMapsWindow;
-  if (targetWindow.kakao?.maps) {
+  if (isKakaoMapSdkReady(targetWindow)) {
     return Promise.resolve();
   }
 
   if (targetWindow.__saladKakaoMapLoader) {
+    return targetWindow.__saladKakaoMapLoader;
+  }
+
+  if (targetWindow.kakao?.maps?.load) {
+    targetWindow.__saladKakaoMapLoader = new Promise<void>((resolve, reject) => {
+      targetWindow.kakao?.maps.load(() => {
+        if (isKakaoMapSdkReady(targetWindow)) {
+          resolve();
+        } else {
+          delete targetWindow.__saladKakaoMapLoader;
+          reject(new Error("Kakao 지도 SDK가 완전히 초기화되지 않았습니다. JavaScript 키와 도메인 설정을 확인해주세요."));
+        }
+      });
+    });
     return targetWindow.__saladKakaoMapLoader;
   }
 
@@ -1994,13 +2058,32 @@ function loadKakaoMapSdk(appKey: string) {
         clearFailedLoader("Kakao 지도 객체를 찾을 수 없습니다.");
         return;
       }
-      kakao.maps.load(finishLoader);
+      kakao.maps.load(() => {
+        if (isKakaoMapSdkReady(targetWindow)) {
+          finishLoader();
+        } else {
+          clearFailedLoader("Kakao 지도 SDK가 완전히 초기화되지 않았습니다. JavaScript 키와 도메인 설정을 확인해주세요.");
+        }
+      });
     };
     script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(appKey)}&autoload=false`;
     document.head.appendChild(script);
   });
 
   return targetWindow.__saladKakaoMapLoader;
+}
+
+function isKakaoMapSdkReady(targetWindow: KakaoMapsWindow) {
+  const maps = targetWindow.kakao?.maps;
+  return Boolean(
+    maps &&
+      typeof maps.load === "function" &&
+      typeof maps.LatLng === "function" &&
+      typeof maps.LatLngBounds === "function" &&
+      typeof maps.Map === "function" &&
+      typeof maps.Polygon === "function" &&
+      typeof maps.CustomOverlay === "function",
+  );
 }
 
 function KakaoDeliveryMap({
@@ -2183,6 +2266,116 @@ const driverZoneDefinitions = [
   },
 ];
 
+const seoulOperationZones = [
+  {
+    name: "서울A-서북권",
+    color: "#db2777",
+    districts: ["은평구", "서대문구", "마포구"],
+    points: [
+      [37.650, 126.885],
+      [37.635, 126.950],
+      [37.610, 126.965],
+      [37.585, 126.950],
+      [37.535, 126.950],
+      [37.535, 126.875],
+      [37.585, 126.885],
+    ],
+  },
+  {
+    name: "서울B-도심권",
+    color: "#111827",
+    districts: ["종로구", "중구", "용산구"],
+    points: [
+      [37.615, 126.955],
+      [37.615, 127.020],
+      [37.575, 127.030],
+      [37.550, 127.020],
+      [37.515, 127.025],
+      [37.515, 126.960],
+      [37.565, 126.955],
+    ],
+  },
+  {
+    name: "서울C-동북권",
+    color: "#635bff",
+    districts: ["도봉구", "강북구", "노원구", "성북구", "동대문구", "중랑구"],
+    points: [
+      [37.705, 127.025],
+      [37.695, 127.105],
+      [37.625, 127.115],
+      [37.580, 127.075],
+      [37.565, 127.025],
+      [37.585, 126.995],
+      [37.645, 127.000],
+    ],
+  },
+  {
+    name: "서울D-서남권",
+    color: "#f59e0b",
+    districts: ["강서구", "양천구", "구로구", "금천구"],
+    points: [
+      [37.590, 126.760],
+      [37.545, 126.890],
+      [37.515, 126.900],
+      [37.475, 126.930],
+      [37.435, 126.875],
+      [37.475, 126.820],
+      [37.535, 126.760],
+    ],
+  },
+  {
+    name: "서울E-영등포권",
+    color: "#10b981",
+    districts: ["영등포구", "동작구", "관악구"],
+    points: [
+      [37.545, 126.880],
+      [37.545, 126.960],
+      [37.525, 126.985],
+      [37.495, 126.985],
+      [37.455, 126.915],
+      [37.490, 126.880],
+    ],
+  },
+  {
+    name: "서울F-동남권",
+    color: "#2e90fa",
+    districts: ["서초구", "강남구", "송파구", "강동구"],
+    points: [
+      [37.535, 126.985],
+      [37.565, 127.115],
+      [37.565, 127.185],
+      [37.485, 127.155],
+      [37.455, 127.075],
+      [37.455, 126.985],
+    ],
+  },
+  {
+    name: "서울G-동부권",
+    color: "#14b8a6",
+    districts: ["성동구", "광진구"],
+    points: [
+      [37.570, 127.020],
+      [37.570, 127.115],
+      [37.525, 127.115],
+      [37.525, 127.060],
+      [37.535, 127.020],
+    ],
+  },
+];
+
+const seoulDeliveryZoneDistricts = seoulOperationZones.reduce<Record<string, string[]>>((districts, zone) => {
+  districts[zone.name] = zone.districts;
+  return districts;
+}, {});
+
+const adminRegionPresets: RegionZonePreset[] = [
+  {
+    name: "서울전체",
+    description: "서울 전체를 배송 운영용 7개 권역으로 나눕니다.",
+    zones: seoulOperationZones,
+  },
+];
+
 function displayZoneName(delivery: Delivery, index: number) {
   const address = `${delivery.address} ${delivery.detailAddress ?? ""}`;
   if (address.includes("삼성") || address.includes("봉은사") || address.includes("코엑스")) return "삼성";
@@ -2192,6 +2385,34 @@ function displayZoneName(delivery: Delivery, index: number) {
   if (address.includes("압구정")) return "압구정";
   if (address.includes("역삼") || address.includes("테헤란")) return "역삼";
   return driverZoneDefinitions[index % driverZoneDefinitions.length].name;
+}
+
+function deliveryMatchesMapZone(delivery: Delivery, zoneName: string) {
+  const address = `${delivery.address} ${delivery.detailAddress ?? ""}`;
+  const districtName = zoneName.replace(/구$/, "");
+  const zoneDistricts = seoulDeliveryZoneDistricts[zoneName] ?? [];
+  return (
+    delivery.zone === zoneName ||
+    delivery.zone.startsWith(districtName) ||
+    address.includes(zoneName) ||
+    address.includes(districtName) ||
+    zoneDistricts.some((district) => {
+      const shortDistrict = district.replace(/구$/, "");
+      return (
+        delivery.zone === district ||
+        delivery.zone.startsWith(shortDistrict) ||
+        address.includes(district) ||
+        address.includes(shortDistrict)
+      );
+    })
+  );
+}
+
+function regionPresetRanges(preset: RegionZonePreset) {
+  return preset.zones.reduce<ZoneRangeConfig>((ranges, zone) => {
+    ranges[zone.name] = { color: zone.color, points: zone.points };
+    return ranges;
+  }, {});
 }
 
 function DriverZoneMap({
@@ -2254,6 +2475,260 @@ function DriverZoneMap({
   );
 }
 
+function AdminZoneRangeMap({
+  deliveries,
+  deliveryZones,
+  drivers,
+  onCreateRegionZones,
+  onSelectDelivery,
+  zoneAssignments,
+}: {
+  deliveries: Delivery[];
+  deliveryZones: string[];
+  drivers: DriverProfile[];
+  onCreateRegionZones: (zoneNames: string[], ranges: ZoneRangeConfig, regionName: string) => void;
+  onSelectDelivery: (deliveryId: string) => void;
+  zoneAssignments: ZoneAssignment;
+}) {
+  const [zoneRanges, setZoneRanges] = useState(() => readZoneRanges());
+  const [visibleRegionName, setVisibleRegionName] = useState(adminRegionPresets[0]?.name ?? "");
+  const zoneDeliveries = useMemo(() => {
+    const visiblePreset = adminRegionPresets.find((preset) => preset.name === visibleRegionName);
+    const zones = visiblePreset?.zones.map((zone) => zone.name) ?? (deliveryZones.length > 0 ? deliveryZones : initialDeliveryZones);
+
+    return zones.map((zoneName, index) => {
+      const base = driverZoneDefinitions[index % driverZoneDefinitions.length];
+      const presetRange = visiblePreset?.zones.find((zone) => zone.name === zoneName);
+      const customRange = zoneRanges[zoneName] ?? presetRange;
+      return {
+        ...base,
+        color: customRange?.color ?? base.color,
+        name: zoneName,
+        points: customRange?.points ?? base.points,
+        deliveries: deliveries
+          .map((delivery, deliveryIndex) => ({ delivery, index: deliveryIndex, zoneName: delivery.zone }))
+          .filter((item) => deliveryMatchesMapZone(item.delivery, zoneName)),
+      };
+    });
+  }, [deliveries, deliveryZones, visibleRegionName, zoneRanges]);
+  const firstZone = zoneDeliveries.find((zone) => zone.deliveries.length > 0)?.name ?? zoneDeliveries[0]?.name ?? "강남A";
+  const [selectedZone, setSelectedZone] = useState(firstZone);
+  const [showRangeSettings, setShowRangeSettings] = useState(false);
+  const [rangeText, setRangeText] = useState("");
+  const [rangeColor, setRangeColor] = useState("#111827");
+  const [rangeMessage, setRangeMessage] = useState("");
+  const selected = zoneDeliveries.find((zone) => zone.name === selectedZone) ?? zoneDeliveries[0];
+  const selectedDriverName = selected ? zoneAssignments[selected.name] : "";
+  const selectedDriver = selectedDriverName
+    ? drivers.find((driver) => driver.name === selectedDriverName)
+    : drivers.find((driver) => driver.zone === selected?.name);
+  const kakaoMapKey = import.meta.env.VITE_KAKAO_MAP_APP_KEY;
+
+  useEffect(() => {
+    if (!selected && firstZone) setSelectedZone(firstZone);
+    if (selected && !zoneDeliveries.some((zone) => zone.name === selectedZone)) {
+      setSelectedZone(firstZone);
+    }
+  }, [firstZone, selected, selectedZone, zoneDeliveries]);
+
+  useEffect(() => {
+    if (!selected) return;
+    setRangeText(formatZonePoints(selected.points));
+    setRangeColor(selected.color);
+    setRangeMessage("");
+  }, [selected]);
+
+  useEffect(() => {
+    const defaultPreset = adminRegionPresets[0];
+    if (!defaultPreset) return;
+
+    const hasMissingZone = defaultPreset.zones.some((zone) => !deliveryZones.includes(zone.name));
+    const hasMissingRange = defaultPreset.zones.some((zone) => !zoneRanges[zone.name]);
+    if (!hasMissingZone && !hasMissingRange) return;
+
+    const presetRanges = regionPresetRanges(defaultPreset);
+    if (hasMissingRange) {
+      const nextRanges = { ...zoneRanges, ...presetRanges };
+      setZoneRanges(nextRanges);
+      saveZoneRanges(nextRanges);
+    }
+    if (hasMissingZone) {
+      onCreateRegionZones(defaultPreset.zones.map((zone) => zone.name), presetRanges, defaultPreset.name);
+    }
+    setVisibleRegionName(defaultPreset.name);
+    setSelectedZone((currentZone) =>
+      defaultPreset.zones.some((zone) => zone.name === currentZone)
+        ? currentZone
+        : defaultPreset.zones[0]?.name ?? currentZone,
+    );
+  }, [deliveryZones, onCreateRegionZones, zoneRanges]);
+
+  if (!selected) return null;
+
+  const pendingCount = selected.deliveries.filter((item) => !item.delivery.done).length;
+  const unassignedCount = selected.deliveries.filter((item) => !item.delivery.assignedDriver).length;
+  const selectedDistricts = seoulDeliveryZoneDistricts[selected.name] ?? [];
+
+  function saveSelectedRange() {
+    const points = parseZonePoints(rangeText);
+    if (!points) {
+      setRangeMessage("좌표는 최소 3개 이상 필요합니다. 예: 37.508000, 127.027000");
+      return;
+    }
+
+    const nextRanges = {
+      ...zoneRanges,
+      [selected.name]: { color: rangeColor, points },
+    };
+    setZoneRanges(nextRanges);
+    saveZoneRanges(nextRanges);
+    setRangeMessage(`${selected.name} 범위가 저장되었습니다.`);
+  }
+
+  function resetSelectedRange() {
+    const { [selected.name]: _removed, ...nextRanges } = zoneRanges;
+    setZoneRanges(nextRanges);
+    saveZoneRanges(nextRanges);
+    setRangeMessage(`${selected.name} 범위를 기본값으로 되돌렸습니다.`);
+  }
+
+  function applyPresetRange(presetIndex: number) {
+    const preset = driverZoneDefinitions[presetIndex % driverZoneDefinitions.length];
+    setRangeText(formatZonePoints(preset.points));
+    setRangeColor(preset.color);
+    setRangeMessage(`${preset.name} 프리셋을 불러왔습니다. 저장을 눌러 적용하세요.`);
+  }
+
+  function applyRegionPreset(preset: RegionZonePreset, openSettings = true) {
+    const presetRanges = regionPresetRanges(preset);
+    const nextRanges = { ...zoneRanges, ...presetRanges };
+    setZoneRanges(nextRanges);
+    saveZoneRanges(nextRanges);
+    onCreateRegionZones(preset.zones.map((zone) => zone.name), presetRanges, preset.name);
+    setVisibleRegionName(preset.name);
+    setSelectedZone(preset.zones[0]?.name ?? selected.name);
+    if (openSettings) setShowRangeSettings(true);
+    setRangeMessage(`${preset.name} 지역을 ${preset.zones.length}개 구역으로 나눴습니다.`);
+  }
+
+  return (
+    <section className="admin-zone-range-card">
+      <div className="admin-zone-range-head">
+        <div>
+          <span>배송 구역 지도</span>
+          <strong>구역별 배송 범위</strong>
+          <p>관리자가 담당 구역, 기사, 배송 건수를 한 화면에서 확인합니다.</p>
+        </div>
+        <div className="admin-zone-range-stats">
+          <span>구역 {zoneDeliveries.length}개</span>
+          <span>배송 {deliveries.length}건</span>
+          <button type="button" onClick={() => setShowRangeSettings((visible) => !visible)}>
+            {showRangeSettings ? "범위 설정 닫기" : "범위 설정"}
+          </button>
+        </div>
+      </div>
+      <div className="admin-zone-map-region-tabs" aria-label="지도 표시 지역">
+        {adminRegionPresets.map((preset) => (
+          <button
+            className={visibleRegionName === preset.name ? "active" : ""}
+            key={preset.name}
+            onClick={() => {
+              applyRegionPreset(preset, false);
+            }}
+            type="button"
+          >
+            {preset.name} 지도 보기
+            <span>{preset.zones.length}구역</span>
+          </button>
+        ))}
+      </div>
+      {kakaoMapKey ? (
+        <KakaoZoneRangeMap
+          appKey={kakaoMapKey}
+          onSelectZone={setSelectedZone}
+          selectedZone={selectedZone}
+          zones={zoneDeliveries}
+        />
+      ) : (
+        <ZoneRangeCanvas
+          message="Kakao 지도 키가 없어 데모 구역 지도로 표시합니다."
+          onSelectZone={setSelectedZone}
+          selectedZone={selectedZone}
+          zones={zoneDeliveries}
+        />
+      )}
+      <div className="admin-zone-range-detail">
+        <div className="admin-zone-range-summary">
+          <strong>{selected.name}</strong>
+          <span>담당 기사: {(selectedDriver?.name ?? selectedDriverName) || "미지정"}</span>
+          {selectedDistricts.length > 0 && <span>포함 지역: {selectedDistricts.join(", ")}</span>}
+          <span>배송 {selected.deliveries.length}건 · 미완료 {pendingCount}건 · 미배정 {unassignedCount}건</span>
+        </div>
+        <div className="admin-zone-range-list">
+          {selected.deliveries.length === 0 ? (
+            <p>선택한 구역의 배송 주문이 없습니다.</p>
+          ) : (
+            selected.deliveries.map(({ delivery }) => (
+              <button key={delivery.id} onClick={() => onSelectDelivery(delivery.id)} type="button">
+                <b>{delivery.customer}</b>
+                <span>{delivery.address} {delivery.detailAddress ?? ""}</span>
+                <em>{delivery.assignedDriver ?? "미배정"} · {delivery.done ? "완료" : "대기"}</em>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+      {showRangeSettings && (
+        <div className="admin-zone-range-editor">
+          <div className="admin-zone-range-editor-head">
+            <div>
+              <strong>{selected.name} 범위 설정</strong>
+              <span>위도, 경도 좌표를 한 줄에 하나씩 입력하면 구역 다각형으로 저장됩니다.</span>
+            </div>
+            <label>
+              색상
+              <input type="color" value={rangeColor} onChange={(event) => setRangeColor(event.currentTarget.value)} />
+            </label>
+          </div>
+          <div className="admin-zone-preset-row">
+            {driverZoneDefinitions.map((preset, index) => (
+              <button key={preset.name} onClick={() => applyPresetRange(index)} type="button">
+                {preset.name} 프리셋
+              </button>
+            ))}
+          </div>
+          <div className="admin-zone-region-presets">
+            <div>
+              <strong>지역별 구역 만들기</strong>
+              <span>큰 지역을 A/B/C 같은 운영 구역으로 자동 분리합니다.</span>
+            </div>
+            <div className="admin-zone-region-row">
+              {adminRegionPresets.map((preset) => (
+                <button key={preset.name} onClick={() => applyRegionPreset(preset)} type="button">
+                  <b>{preset.name} · {preset.zones.length}구역</b>
+                  <span>{preset.description}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <IonTextarea
+            label="범위 좌표"
+            labelPlacement="stacked"
+            rows={6}
+            value={rangeText}
+            onIonInput={(event) => setRangeText(String(event.detail.value ?? ""))}
+          />
+          <div className="admin-zone-editor-actions">
+            <IonButton onClick={saveSelectedRange}>범위 저장</IonButton>
+            <IonButton fill="outline" onClick={resetSelectedRange}>기본값 복원</IonButton>
+            {rangeMessage && <IonChip color={rangeMessage.includes("필요") ? "warning" : "success"}>{rangeMessage}</IonChip>}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 type DriverZoneWithDeliveries = (typeof driverZoneDefinitions)[number] & {
   deliveries: Array<{ delivery: Delivery; index: number; zoneName: string }>;
 };
@@ -2271,12 +2746,25 @@ function ZoneRangeCanvas({
 }) {
   return (
     <div className="zone-canvas">
+      <svg aria-hidden="true" className="zone-canvas-polygons" preserveAspectRatio="none" viewBox="0 0 100 100">
+        {zones.map((zone) => (
+          <polygon
+            className={selectedZone === zone.name ? "active" : ""}
+            fill={zone.color}
+            key={zone.name}
+            onClick={() => onSelectZone(zone.name)}
+            points={zoneCanvasPolygonPoints(zone, zones)}
+            stroke={zone.color}
+          />
+        ))}
+      </svg>
       {message && <div className="zone-canvas-notice">{message}</div>}
       {zones.map((zone) => (
         <button
           className={`zone-shape ${zone.className} ${selectedZone === zone.name ? "active" : ""}`}
           key={zone.name}
           onClick={() => onSelectZone(zone.name)}
+          style={zoneCanvasPosition(zone, zones)}
           type="button"
         >
           <strong>{zone.name}</strong>
@@ -2287,12 +2775,48 @@ function ZoneRangeCanvas({
   );
 }
 
+function zoneBounds(zones: DriverZoneWithDeliveries[]) {
+  const allPoints = zones.flatMap((item) => item.points);
+  const minLat = Math.min(...allPoints.map(([lat]) => lat));
+  const maxLat = Math.max(...allPoints.map(([lat]) => lat));
+  const minLng = Math.min(...allPoints.map(([, lng]) => lng));
+  const maxLng = Math.max(...allPoints.map(([, lng]) => lng));
+
+  return { maxLat, maxLng, minLat, minLng };
+}
+
+function zonePointToCanvas([lat, lng]: number[], zones: DriverZoneWithDeliveries[]) {
+  const { maxLat, maxLng, minLat, minLng } = zoneBounds(zones);
+  const x = ((lng - minLng) / Math.max(0.0001, maxLng - minLng)) * 90 + 5;
+  const y = ((maxLat - lat) / Math.max(0.0001, maxLat - minLat)) * 84 + 8;
+
+  return `${Math.max(2, Math.min(98, x)).toFixed(2)},${Math.max(2, Math.min(98, y)).toFixed(2)}`;
+}
+
+function zoneCanvasPolygonPoints(zone: DriverZoneWithDeliveries, zones: DriverZoneWithDeliveries[]) {
+  return zone.points.map((point) => zonePointToCanvas(point, zones)).join(" ");
+}
+
 function zoneCenter(points: number[][]) {
   const sums = points.reduce(
     (acc, [lat, lng]) => ({ lat: acc.lat + lat, lng: acc.lng + lng }),
     { lat: 0, lng: 0 },
   );
   return [sums.lat / points.length, sums.lng / points.length];
+}
+
+function zoneCanvasPosition(zone: DriverZoneWithDeliveries, zones: DriverZoneWithDeliveries[]) {
+  const { maxLat, maxLng, minLat, minLng } = zoneBounds(zones);
+  const [lat, lng] = zoneCenter(zone.points);
+  const left = ((lng - minLng) / Math.max(0.0001, maxLng - minLng)) * 72 + 10;
+  const top = ((maxLat - lat) / Math.max(0.0001, maxLat - minLat)) * 58 + 12;
+
+  return {
+    bottom: "auto",
+    left: `${Math.max(6, Math.min(82, left))}%`,
+    right: "auto",
+    top: `${Math.max(6, Math.min(74, top))}%`,
+  };
 }
 
 function KakaoZoneRangeMap({
@@ -2454,6 +2978,7 @@ function AdminArea() {
   const [newZoneName, setNewZoneName] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("전체");
+  const [selectedAdminListDeliveryId, setSelectedAdminListDeliveryId] = useState<string | null>(null);
   const [zoneAssignments, setZoneAssignments] = useState(() => readZoneAssignments());
   const approvedDrivers = driverProfiles.filter((driver) => driver.status === "승인 완료");
   const unassignedDeliveries = dispatchDeliveries.filter((delivery) => !delivery.assignedDriver);
@@ -2581,6 +3106,41 @@ function AdminArea() {
   function updateZoneAssignments(nextAssignments: ZoneAssignment) {
     setZoneAssignments(nextAssignments);
     saveZoneAssignments(nextAssignments);
+  }
+
+  function createRegionZones(zoneNames: string[], ranges: ZoneRangeConfig, regionName: string) {
+    const missingZoneNames = zoneNames.filter((zoneName) => !deliveryZones.includes(zoneName));
+    if (missingZoneNames.length === 0) {
+      saveZoneRanges({ ...readZoneRanges(), ...ranges });
+      setApiStatus(`${regionName} 구역이 이미 등록되어 있습니다.`);
+      return;
+    }
+
+    const nextZones = Array.from(new Set([...deliveryZones, ...zoneNames]));
+    const nextAssignments = { ...zoneAssignments };
+    missingZoneNames.forEach((zoneName, index) => {
+      if (!nextAssignments[zoneName]) {
+        nextAssignments[zoneName] = approvedDrivers[index % Math.max(approvedDrivers.length, 1)]?.name ?? "";
+      }
+    });
+
+    updateDeliveryZones(nextZones);
+    updateZoneAssignments(nextAssignments);
+    saveZoneRanges({ ...readZoneRanges(), ...ranges });
+    setApiStatus(`${regionName} 지역 구역을 생성했습니다.`);
+
+    Promise.all(
+      missingZoneNames
+        .filter((zoneName) => !springZones.some((zone) => zone.zoneName === zoneName))
+        .map((zoneName) =>
+          createSpringZone({
+            zoneName,
+            description: `${regionName} 지역 세부 배송 구역`,
+          }),
+        ),
+    )
+      .then(() => refreshSpringData())
+      .catch(() => setApiStatus(`${regionName} 구역 데모 반영 · API 저장은 나중에 다시 시도하세요.`));
   }
 
   function assignZoneDriver(zone: string, driverName: string) {
@@ -2943,6 +3503,7 @@ function AdminArea() {
               delivery.customer,
               `${delivery.orderNo} · ${delivery.zone} · ${delivery.assignedDriver} 기사`,
               delivery.done ? "배송 완료" : "배정 완료",
+              delivery.id,
             ])
           : [["배정 대기", "미배정 주문을 기사에게 배정해주세요.", "대기"]],
         actions: ["미배정 주문 확인", "기사에게 배정", "배정 취소", "데모 초기화"],
@@ -3094,6 +3655,17 @@ function AdminArea() {
     });
   }, [content.rows, searchTerm, statusFilter]);
 
+  const selectedAdminListDelivery =
+    tab === "dispatch"
+      ? dispatchDeliveries.find((delivery) => delivery.id === selectedAdminListDeliveryId) ?? null
+      : null;
+
+  useEffect(() => {
+    if (tab !== "dispatch") {
+      setSelectedAdminListDeliveryId(null);
+    }
+  }, [tab]);
+
   if (!loggedIn) {
     return <AdminLogin onLogin={(email) => {
       saveAdminSession(email);
@@ -3144,7 +3716,22 @@ function AdminArea() {
             statusFilter={statusFilter}
             tab={tab}
           />
-          <AdminListPanel rows={filteredRows} totalCount={content.rows.length} />
+          <AdminListPanel
+            onDetail={(row) => {
+              const deliveryId = row[3];
+              if (tab === "dispatch" && deliveryId) {
+                setSelectedAdminListDeliveryId((current) => (current === deliveryId ? null : deliveryId));
+              }
+            }}
+            detailDelivery={selectedAdminListDelivery}
+            detailDrivers={approvedDrivers}
+            onAssignDelivery={assignDelivery}
+            onAutoAssignDelivery={autoAssignDelivery}
+            onUnassignDelivery={unassignDelivery}
+            rows={filteredRows}
+            selectedDetailId={selectedAdminListDeliveryId}
+            totalCount={content.rows.length}
+          />
         <div className="admin-kpis">
           {content.metrics.map(([label, value]) => (
             <div className="admin-kpi" key={label}>
@@ -3179,6 +3766,7 @@ function AdminArea() {
                   onAddZone={addDeliveryZone}
                   onAssign={assignDelivery}
                   onAutoAssign={autoAssignDelivery}
+                  onCreateRegionZones={createRegionZones}
                   onNewZoneNameChange={setNewZoneName}
                   onUnassign={unassignDelivery}
                   onZoneRemove={removeDeliveryZone}
@@ -3434,6 +4022,7 @@ function DispatchManagement({
   onAddZone,
   onAssign,
   onAutoAssign,
+  onCreateRegionZones,
   onNewZoneNameChange,
   onUnassign,
   onZoneRemove,
@@ -3448,6 +4037,7 @@ function DispatchManagement({
   onAddZone: () => void;
   onAssign: (deliveryId: string, driverName: string) => void;
   onAutoAssign: (deliveryId: string) => void;
+  onCreateRegionZones: (zoneNames: string[], ranges: ZoneRangeConfig, regionName: string) => void;
   onNewZoneNameChange: (zoneName: string) => void;
   onUnassign: (deliveryId: string) => void;
   onZoneRemove: (zone: string) => void;
@@ -3458,9 +4048,25 @@ function DispatchManagement({
   const usedZones = new Set([...assignedDeliveries, ...unassignedDeliveries].map((delivery) => delivery.zone));
   const [showZoneSettings, setShowZoneSettings] = useState(false);
   const [showManualAssign, setShowManualAssign] = useState(false);
+  const [selectedDeliveryId, setSelectedDeliveryId] = useState<string | null>(null);
+  const allDeliveries = [...unassignedDeliveries, ...assignedDeliveries];
+  const selectedDelivery = allDeliveries.find((delivery) => delivery.id === selectedDeliveryId) ?? allDeliveries[0];
+
+  useEffect(() => {
+    if (selectedDeliveryId && allDeliveries.some((delivery) => delivery.id === selectedDeliveryId)) return;
+    setSelectedDeliveryId(allDeliveries[0]?.id ?? null);
+  }, [allDeliveries, selectedDeliveryId]);
 
   return (
     <div className="dispatch-board">
+      <AdminZoneRangeMap
+        deliveries={allDeliveries}
+        deliveryZones={deliveryZones}
+        drivers={drivers}
+        onCreateRegionZones={onCreateRegionZones}
+        onSelectDelivery={setSelectedDeliveryId}
+        zoneAssignments={zoneAssignments}
+      />
       <section className="zone-assignment-panel">
         <div className="dispatch-section-title">
           <strong>구역별 담당 기사</strong>
@@ -3538,7 +4144,7 @@ function DispatchManagement({
             </IonItem>
           )}
           {unassignedDeliveries.map((delivery) => (
-            <IonItem key={delivery.id}>
+            <IonItem className={selectedDelivery?.id === delivery.id ? "selected-dispatch-item" : ""} key={delivery.id}>
               <IonIcon icon={clipboardOutline} slot="start" />
               <IonLabel>
                 <h2>{delivery.customer}</h2>
@@ -3546,6 +4152,7 @@ function DispatchManagement({
                 <p>{delivery.memo}</p>
               </IonLabel>
               <div className="dispatch-buttons" slot="end">
+                <IonButton fill="outline" size="small" onClick={() => setSelectedDeliveryId(delivery.id)}>상세보기</IonButton>
                 <IonButton size="small" onClick={() => onAutoAssign(delivery.id)}>자동 배정</IonButton>
                 {showManualAssign && drivers.map((driver) => (
                   <IonButton
@@ -3569,21 +4176,124 @@ function DispatchManagement({
         </div>
         <IonList>
           {assignedDeliveries.map((delivery, index) => (
-            <IonItem key={delivery.id}>
+            <IonItem className={selectedDelivery?.id === delivery.id ? "selected-dispatch-item" : ""} key={delivery.id}>
               <IonIcon icon={carOutline} slot="start" />
               <IonLabel>
                 <h2>#{index + 1} {delivery.customer}</h2>
                 <p>{delivery.assignedDriver} 기사 · {delivery.zone} · {delivery.address}</p>
                 <p>{delivery.done ? "기사 앱에서 배송 완료 처리됨" : "기사 앱 배송 대기"}</p>
               </IonLabel>
-              <IonBadge color={delivery.done ? "success" : "medium"}>{delivery.done ? "완료" : "배정"}</IonBadge>
-              <IonButton fill="clear" size="small" slot="end" onClick={() => onUnassign(delivery.id)}>
-                배정 취소
-              </IonButton>
+              <div className="dispatch-buttons" slot="end">
+                <IonBadge color={delivery.done ? "success" : "medium"}>{delivery.done ? "완료" : "배정"}</IonBadge>
+                <IonButton fill="outline" size="small" onClick={() => setSelectedDeliveryId(delivery.id)}>상세보기</IonButton>
+                <IonButton fill="clear" size="small" onClick={() => onUnassign(delivery.id)}>
+                  배정 취소
+                </IonButton>
+              </div>
             </IonItem>
           ))}
         </IonList>
       </section>
+      <DeliveryDetailPanel
+        delivery={selectedDelivery}
+        drivers={drivers}
+        onAssign={onAssign}
+        onAutoAssign={onAutoAssign}
+        onUnassign={onUnassign}
+      />
+    </div>
+  );
+}
+
+function DeliveryDetailPanel({
+  delivery,
+  drivers,
+  onAssign,
+  onAutoAssign,
+  onUnassign,
+}: {
+  delivery: Delivery | null | undefined;
+  drivers: DriverProfile[];
+  onAssign: (deliveryId: string, driverName: string) => void;
+  onAutoAssign: (deliveryId: string) => void;
+  onUnassign: (deliveryId: string) => void;
+}) {
+  if (!delivery) return null;
+
+  const selectedDriver = delivery.assignedDriver
+    ? drivers.find((driver) => driver.name === delivery.assignedDriver)
+    : null;
+
+  return (
+    <section className="dispatch-detail-panel">
+      <div className="dispatch-detail-head">
+        <div>
+          <span>배송 상세</span>
+          <strong>{delivery.customer}</strong>
+          <p>{delivery.orderNo}</p>
+        </div>
+        <IonBadge color={delivery.done ? "success" : delivery.assignedDriver ? "primary" : "warning"}>
+          {delivery.done ? "배송 완료" : delivery.assignedDriver ? "배정 완료" : "미배정"}
+        </IonBadge>
+      </div>
+      <div className="dispatch-detail-grid">
+        <DetailCell label="고객 연락처" value={delivery.phone} />
+        <DetailCell label="이메일" value={delivery.email} />
+        <DetailCell label="배송일" value={delivery.deliveryDate ?? "오늘"} />
+        <DetailCell label="구역" value={delivery.zone} />
+        <DetailCell label="담당 기사" value={delivery.assignedDriver ?? "미배정"} />
+        <DetailCell label="기사 연락처" value={selectedDriver?.phone ?? "-"} />
+        <DetailCell label="샐러드 수량" value={`${delivery.saladCount ?? 1}개`} />
+        <DetailCell label="보냉백" value={delivery.bagCount > 0 ? `${delivery.bagCount}개 · ${delivery.bagCollected ? "회수 완료" : "회수 필요"}` : "회수 없음"} />
+      </div>
+      <div className="dispatch-detail-address">
+        <strong>배송 주소</strong>
+        <p>{[delivery.address, delivery.detailAddress].filter(Boolean).join(" ")}</p>
+      </div>
+      <div className="dispatch-detail-memo">
+        <div>
+          <strong>고객 요청사항</strong>
+          <p>{delivery.memo || "요청사항 없음"}</p>
+        </div>
+        <div>
+          <strong>기사 메모</strong>
+          <p>{delivery.driverMemo || "작성된 메모 없음"}</p>
+        </div>
+      </div>
+      <div className="dispatch-detail-status">
+        <span className={delivery.customerActive ? "done" : ""}>고객 활성</span>
+        <span className={delivery.addressConfirmed ? "done" : ""}>주소 확인</span>
+        <span className={delivery.orderPrepared ? "done" : ""}>주문 준비</span>
+        <span className={delivery.assignedDriver ? "done" : ""}>기사 배정</span>
+        <span className={delivery.done ? "done" : ""}>배송 완료</span>
+      </div>
+      <div className="dispatch-detail-actions">
+        {delivery.assignedDriver ? (
+          <IonButton fill="outline" onClick={() => onUnassign(delivery.id)}>배정 취소</IonButton>
+        ) : (
+          <>
+            <IonButton onClick={() => onAutoAssign(delivery.id)}>자동 배정</IonButton>
+            {drivers.map((driver) => (
+              <IonButton
+                fill={driver.zone === delivery.zone ? "solid" : "outline"}
+                key={`detail-${driver.name}`}
+                onClick={() => onAssign(delivery.id, driver.name)}
+              >
+                {driver.name}
+              </IonButton>
+            ))}
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function DetailCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="detail-cell">
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   );
 }
@@ -3975,7 +4685,27 @@ function AdminFilterPanel({
   );
 }
 
-function AdminListPanel({ rows, totalCount }: { rows: string[][]; totalCount: number }) {
+function AdminListPanel({
+  detailDelivery,
+  detailDrivers = [],
+  onDetail,
+  onAssignDelivery,
+  onAutoAssignDelivery,
+  onUnassignDelivery,
+  rows,
+  selectedDetailId,
+  totalCount,
+}: {
+  detailDelivery?: Delivery | null;
+  detailDrivers?: DriverProfile[];
+  onDetail?: (row: string[]) => void;
+  onAssignDelivery?: (deliveryId: string, driverName: string) => void;
+  onAutoAssignDelivery?: (deliveryId: string) => void;
+  onUnassignDelivery?: (deliveryId: string) => void;
+  rows: string[][];
+  selectedDetailId?: string | null;
+  totalCount: number;
+}) {
   return (
     <div className="admin-list-panel">
       <div className="admin-list-count">전체 {totalCount}건 · 검색결과 {rows.length}건</div>
@@ -3987,17 +4717,38 @@ function AdminListPanel({ rows, totalCount }: { rows: string[][]; totalCount: nu
           <span>내용</span>
           <span>상세보기</span>
         </div>
-        {rows.map(([title, description, status], index) => (
-          <div className="admin-list-row" key={`${title}-${index}`}>
-            <span>{index + 1}</span>
-            <span>
-              <IonBadge color={adminBadgeColor(status)}>{status}</IonBadge>
-            </span>
-            <strong>{title}</strong>
-            <p>{description}</p>
-            <IonButton fill="clear" size="small">상세보기</IonButton>
-          </div>
-        ))}
+        {rows.map((row, index) => {
+          const [title, description, status] = row;
+          const rowDeliveryId = row[3];
+          const expanded = Boolean(rowDeliveryId && selectedDetailId === rowDeliveryId && detailDelivery?.id === rowDeliveryId);
+
+          return (
+            <div className={expanded ? "admin-list-entry expanded" : "admin-list-entry"} key={`${title}-${index}`}>
+              <div className="admin-list-row">
+                <span>{index + 1}</span>
+                <span>
+                  <IonBadge color={adminBadgeColor(status)}>{status}</IonBadge>
+                </span>
+                <strong>{title}</strong>
+                <p>{description}</p>
+                <button className="admin-detail-button" disabled={!rowDeliveryId} onClick={() => onDetail?.(row)} type="button">
+                  {expanded ? "닫기" : "상세보기"}
+                </button>
+              </div>
+              {expanded && onAssignDelivery && onAutoAssignDelivery && onUnassignDelivery && (
+                <div className="admin-list-detail-row">
+                  <DeliveryDetailPanel
+                    delivery={detailDelivery}
+                    drivers={detailDrivers}
+                    onAssign={onAssignDelivery}
+                    onAutoAssign={onAutoAssignDelivery}
+                    onUnassign={onUnassignDelivery}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
