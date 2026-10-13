@@ -128,6 +128,19 @@ type RegionZonePreset = {
   zones: Array<{ name: string; color: string; districts?: string[]; points: number[][] }>;
 };
 
+type ManualDeliveryInput = {
+  address: string;
+  bagCount: number;
+  customer: string;
+  deliveryDate: string;
+  detailAddress: string;
+  email: string;
+  memo: string;
+  phone: string;
+  saladCount: number;
+  zone: string;
+};
+
 const initialDeliveryZones = ["강남A", "서초B", "송파C", "잠실D", "마포E", "성수F"];
 const demoTodayDate = todayInputValue();
 const demoTomorrowDate = addDaysToInputDate(demoTodayDate, 1);
@@ -358,6 +371,13 @@ const initialZoneAssignments: ZoneAssignment = {
   "잠실D": "오배송",
   "마포E": "박배송",
   "성수F": "한배송",
+  "서울A-서북권": "박배송",
+  "서울B-도심권": "한배송",
+  "서울C-동북권": "김라이더",
+  "서울D-서남권": "오배송",
+  "서울E-영등포권": "박배송",
+  "서울F-동남권": "한배송",
+  "서울G-동부권": "김라이더",
 };
 const DISPATCH_STORAGE_KEY = "salad_dispatch_deliveries";
 const DRIVER_PROFILE_STORAGE_KEY = "salad_driver_profiles";
@@ -1258,6 +1278,16 @@ function DriverArea() {
   const bagCollected = visibleDeliveries.filter((delivery) => delivery.bagCollected).reduce((total, delivery) => total + delivery.bagCount, 0);
   const saladRequired = visibleDeliveries.reduce((total, delivery) => total + (delivery.saladCount ?? 1), 0);
   const saladDelivered = visibleDeliveries.filter((delivery) => delivery.done).reduce((total, delivery) => total + (delivery.saladCount ?? 1), 0);
+  const workStatus =
+    visibleDeliveries.length === 0
+      ? "대기"
+      : completedCount === 0 && !working
+        ? "배송 대기"
+        : completedCount >= visibleDeliveries.length
+          ? "퇴근 가능"
+          : completedCount > 0 || working
+            ? "출근"
+            : "배송 대기";
 
   useEffect(() => {
     const syncAssignedDeliveries = () => {
@@ -1560,6 +1590,7 @@ function DriverArea() {
               deliveries={visibleDeliveries.length}
               saladDelivered={saladDelivered}
               saladRequired={saladRequired}
+              workStatus={workStatus}
             />
             <div className="driver-start-row">
               <IonButton onClick={() => { setWorking(true); flash("출근 기록이 저장되었습니다."); }}>
@@ -1582,6 +1613,7 @@ function DriverArea() {
               }}
               onComplete={(delivery) => {
                 updateDeliveryById(delivery.id, { done: true, bagCollected: delivery.bagCount === 0 ? true : delivery.bagCollected });
+                setWorking(true);
                 flash(`${delivery.customer} 배송 완료 처리되었습니다.`);
               }}
               onCopy={copyText}
@@ -1660,6 +1692,7 @@ function DriverArea() {
               <IonInput label="이름" labelPlacement="stacked" value={currentDriver.name} />
               <IonInput label="전화번호" labelPlacement="stacked" value={currentDriver.phone} />
               <IonInput label="담당 구역" labelPlacement="stacked" value={currentDriver.zone} />
+              <IonInput label="오늘 근무 상태" labelPlacement="stacked" value={workStatus} />
               <IonButton expand="block" onClick={() => flash("기사 정보가 저장되었습니다.")}>내 정보 저장</IonButton>
               <IonButton expand="block" fill="outline" onClick={() => { setWorking(false); flash("퇴근 기록이 저장되었습니다."); }}>퇴근 기록</IonButton>
             </IonCardContent>
@@ -1707,6 +1740,7 @@ function DriverTodaySummary({
   deliveries,
   saladDelivered,
   saladRequired,
+  workStatus,
 }: {
   bagCollected: number;
   bagRequired: number;
@@ -1714,6 +1748,7 @@ function DriverTodaySummary({
   deliveries: number;
   saladDelivered: number;
   saladRequired: number;
+  workStatus: string;
 }) {
   const percent = deliveries === 0 ? 0 : Math.round((completedCount / deliveries) * 100);
 
@@ -1721,7 +1756,7 @@ function DriverTodaySummary({
     <section className="driver-summary-panel">
       <div className="driver-summary-head">
         <strong>오늘의 요약</strong>
-        <span>{percent}% 완료</span>
+        <span>{workStatus} · {percent}% 완료</span>
       </div>
       <div className="driver-progress"><i style={{ width: `${percent}%` }} /></div>
       <div className="driver-summary-grid">
@@ -2408,6 +2443,61 @@ function deliveryMatchesMapZone(delivery: Delivery, zoneName: string) {
   );
 }
 
+function deliveryDateValue(delivery: Delivery) {
+  return delivery.deliveryDate ?? demoTodayDate;
+}
+
+function deliveriesForDate(deliveries: Delivery[], date: string) {
+  return deliveries.filter((delivery) => deliveryDateValue(delivery) === date);
+}
+
+function resolveZoneByAddress(address: string, detailAddress: string, fallbackZones: string[]) {
+  const fullAddress = `${address} ${detailAddress}`;
+  const seoulZone = seoulOperationZones.find((zone) =>
+    zone.districts.some((district) => fullAddress.includes(district) || fullAddress.includes(district.replace(/구$/, ""))),
+  );
+  if (seoulZone) return seoulZone.name;
+
+  const namedZone = fallbackZones.find((zone) => fullAddress.includes(zone));
+  return namedZone ?? fallbackZones[0] ?? initialDeliveryZones[0];
+}
+
+function customerKey(delivery: Delivery) {
+  return delivery.phone || delivery.email || delivery.customer;
+}
+
+function isOneTimeDelivery(delivery: Delivery, deliveries: Delivery[]) {
+  const sameCustomerOrders = deliveries.filter((item) => customerKey(item) === customerKey(delivery));
+  return sameCustomerOrders.length <= 1 || !delivery.customerActive;
+}
+
+function driverWorkStats(deliveries: Delivery[], driverName: string, date: string) {
+  const assigned = deliveriesForDate(deliveries, date).filter((delivery) => delivery.assignedDriver === driverName);
+  const completed = assigned.filter((delivery) => delivery.done);
+  const percent = assigned.length === 0 ? 0 : Math.round((completed.length / assigned.length) * 100);
+  const bagMissing = assigned.filter((delivery) => delivery.bagCount > 0 && !delivery.bagCollected).length;
+  const saladCount = assigned.reduce((total, delivery) => total + (delivery.saladCount ?? 1), 0);
+  const status =
+    assigned.length === 0
+      ? "대기"
+      : completed.length === 0
+        ? "배송 대기"
+        : completed.length >= assigned.length
+          ? "퇴근"
+          : completed.length === 1
+            ? "출근"
+            : "배송중";
+
+  return {
+    assignedCount: assigned.length,
+    bagMissing,
+    completedCount: completed.length,
+    percent,
+    saladCount,
+    status,
+  };
+}
+
 function regionPresetRanges(preset: RegionZonePreset) {
   return preset.zones.reduce<ZoneRangeConfig>((ranges, zone) => {
     ranges[zone.name] = { color: zone.color, points: zone.points };
@@ -2976,17 +3066,19 @@ function AdminArea() {
   const [adminAccounts, setAdminAccounts] = useState<SpringAdminAccount[]>([]);
   const [menuCollapsed, setMenuCollapsed] = useState(false);
   const [newZoneName, setNewZoneName] = useState("");
+  const [adminSelectedDate, setAdminSelectedDate] = useState(() => todayInputValue());
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("전체");
   const [selectedAdminListDeliveryId, setSelectedAdminListDeliveryId] = useState<string | null>(null);
   const [zoneAssignments, setZoneAssignments] = useState(() => readZoneAssignments());
   const approvedDrivers = driverProfiles.filter((driver) => driver.status === "승인 완료");
-  const unassignedDeliveries = dispatchDeliveries.filter((delivery) => !delivery.assignedDriver);
-  const assignedDeliveries = dispatchDeliveries.filter((delivery) => delivery.assignedDriver);
-  const nextAddressCheck = dispatchDeliveries.find((delivery) => !delivery.addressConfirmed);
-  const nextOrderPrepare = dispatchDeliveries.find((delivery) => delivery.addressConfirmed && !delivery.orderPrepared);
-  const nextDispatch = dispatchDeliveries.find((delivery) => delivery.orderPrepared && !delivery.assignedDriver);
-  const nextBagCollect = dispatchDeliveries.find((delivery) => delivery.bagCount > 0 && !delivery.bagCollected);
+  const dateDeliveries = useMemo(() => deliveriesForDate(dispatchDeliveries, adminSelectedDate), [adminSelectedDate, dispatchDeliveries]);
+  const unassignedDeliveries = dateDeliveries.filter((delivery) => !delivery.assignedDriver);
+  const assignedDeliveries = dateDeliveries.filter((delivery) => delivery.assignedDriver);
+  const nextAddressCheck = dateDeliveries.find((delivery) => !delivery.addressConfirmed);
+  const nextOrderPrepare = dateDeliveries.find((delivery) => delivery.addressConfirmed && !delivery.orderPrepared);
+  const nextDispatch = dateDeliveries.find((delivery) => delivery.orderPrepared && !delivery.assignedDriver);
+  const nextBagCollect = dateDeliveries.find((delivery) => delivery.bagCount > 0 && !delivery.bagCollected);
 
   useEffect(() => {
     const syncDispatchDeliveries = () => setDispatchDeliveries(readDispatchDeliveries());
@@ -3150,6 +3242,13 @@ function AdminArea() {
     updateDriverProfiles(
       driverProfiles.map((driver) =>
         driver.name === driverName ? { ...driver, zone, zoneId: targetZone?.id ?? driver.zoneId } : driver,
+      ),
+    );
+    updateDispatchDeliveries(
+      dispatchDeliveries.map((delivery) =>
+        delivery.zone === zone && !delivery.done
+          ? { ...delivery, assignedDriver: driverName, driverId: targetDriver?.id ?? delivery.driverId ?? null }
+          : delivery,
       ),
     );
     if (isUuid(targetDriver?.id) && isUuid(targetZone?.id)) {
@@ -3402,6 +3501,41 @@ function AdminArea() {
     }
   }
 
+  function createManualDelivery(input: ManualDeliveryInput) {
+    const zone = input.zone || resolveZoneByAddress(input.address, input.detailAddress, deliveryZones);
+    const assignedDriver = zoneAssignments[zone] || null;
+    const nextNumber = dispatchDeliveries.length + 1;
+    const nextDelivery: Delivery = {
+      address: input.address.trim(),
+      addressConfirmed: true,
+      assignedDriver,
+      bagCollected: input.bagCount === 0,
+      bagCount: input.bagCount,
+      customer: input.customer.trim(),
+      customerActive: true,
+      deliveryDate: input.deliveryDate,
+      detailAddress: input.detailAddress.trim(),
+      done: false,
+      driverMemo: "",
+      email: input.email.trim(),
+      id: `manual-${Date.now()}`,
+      lat: 37.501 + (nextNumber % 7) * 0.004,
+      lng: 127.026 + (nextNumber % 9) * 0.005,
+      memo: input.memo.trim() || "요청사항 없음",
+      orderNo: `ORD-${input.deliveryDate.replace(/-/g, "")}-${String(nextNumber).padStart(3, "0")}`,
+      orderPrepared: true,
+      phone: input.phone.trim(),
+      saladCount: input.saladCount,
+      zone,
+    };
+
+    if (!deliveryZones.includes(zone)) {
+      updateDeliveryZones([...deliveryZones, zone]);
+    }
+    updateDispatchDeliveries([...dispatchDeliveries, nextDelivery]);
+    setApiStatus(`주문 등록 완료 · ${zone}${assignedDriver ? ` · ${assignedDriver} 기사 자동 배정` : ""}`);
+  }
+
   async function registerDriverProfile() {
     const timestamp = Date.now().toString().slice(-6);
     try {
@@ -3473,14 +3607,14 @@ function AdminArea() {
     if (tab === "orders") {
       return {
         title: "주문/정기배송 관리",
-        subtitle: "배송일, 상품, 수량, 고객 요청사항을 확인하고 배송 준비 상태로 전환합니다.",
+        subtitle: `${adminSelectedDate} 배송일 기준으로 주문을 등록하고 준비 상태를 확인합니다.`,
         metrics: [
-          ["오늘 주문", `${dispatchDeliveries.length}건`],
-          ["준비 완료", `${dispatchDeliveries.filter((delivery) => delivery.orderPrepared).length}건`],
-          ["주소 확인", `${dispatchDeliveries.filter((delivery) => !delivery.addressConfirmed).length}건`],
-          ["배송 완료", `${dispatchDeliveries.filter((delivery) => delivery.done).length}건`],
+          ["선택일 주문", `${dateDeliveries.length}건`],
+          ["준비 완료", `${dateDeliveries.filter((delivery) => delivery.orderPrepared).length}건`],
+          ["주소 확인", `${dateDeliveries.filter((delivery) => !delivery.addressConfirmed).length}건`],
+          ["배송 완료", `${dateDeliveries.filter((delivery) => delivery.done).length}건`],
         ],
-        rows: dispatchDeliveries.map((delivery) => [
+        rows: dateDeliveries.map((delivery) => [
           delivery.orderNo,
           `${delivery.customer} · ${delivery.zone} · ${delivery.address}`,
           orderStatus(delivery),
@@ -3514,14 +3648,14 @@ function AdminArea() {
         title: "고객 관리",
         subtitle: "고객 가입 정보, 배송 주소, 정기배송 상태를 웹에서 관리합니다.",
         metrics: [
-          ["전체 고객", `${dispatchDeliveries.length}명`],
-          ["활성", `${dispatchDeliveries.filter((delivery) => delivery.customerActive).length}명`],
+          ["전체 고객", `${new Set(dispatchDeliveries.map(customerKey)).size}명`],
+          ["선택일 배송", `${dateDeliveries.length}명`],
+          ["1회용", `${dispatchDeliveries.filter((delivery) => isOneTimeDelivery(delivery, dispatchDeliveries)).length}명`],
           ["주소 확인", `${dispatchDeliveries.filter((delivery) => !delivery.addressConfirmed).length}명`],
-          ["중지", `${dispatchDeliveries.filter((delivery) => !delivery.customerActive).length}명`],
         ],
         rows: dispatchDeliveries.map((delivery) => [
           delivery.customer,
-          `${delivery.phone} · ${delivery.address} · ${delivery.email}`,
+          `${delivery.phone} · ${isOneTimeDelivery(delivery, dispatchDeliveries) ? "1회용/재주문 없음" : "정기회원"} · ${delivery.address}`,
           customerStatus(delivery),
         ]),
         actions: ["고객 추가", "주소/전화번호 수정", "정기배송 상태 변경", "배송 요청사항 관리"],
@@ -3530,17 +3664,17 @@ function AdminArea() {
     if (tab === "drivers") {
       return {
         title: "기사 승인/관리",
-        subtitle: "기사 가입 신청을 승인하고 담당 구역, 출근 상태, 배송 권한을 관리합니다.",
+        subtitle: `${adminSelectedDate} 기준 기사 출근 상태와 배송 완료율을 확인합니다.`,
         metrics: [
           ["전체 기사", `${driverProfiles.length}명`],
           ["승인 완료", `${approvedDrivers.length}명`],
-          ["승인 대기", `${driverProfiles.filter((driver) => driver.status === "승인 대기").length}명`],
-          ["보류", `${driverProfiles.filter((driver) => driver.status === "보류").length}명`],
+          ["출근/배송중", `${approvedDrivers.filter((driver) => ["출근", "배송중"].includes(driverWorkStats(dispatchDeliveries, driver.name, adminSelectedDate).status)).length}명`],
+          ["퇴근", `${approvedDrivers.filter((driver) => driverWorkStats(dispatchDeliveries, driver.name, adminSelectedDate).status === "퇴근").length}명`],
         ],
         rows: driverProfiles.map((driver) => [
           driver.name,
-          `${driver.zone} · ${driver.phone} · 배정 ${dispatchDeliveries.filter((delivery) => delivery.assignedDriver === driver.name).length}건`,
-          driver.status,
+          `${driver.zone} · ${driver.phone} · ${driverWorkStats(dispatchDeliveries, driver.name, adminSelectedDate).completedCount}/${driverWorkStats(dispatchDeliveries, driver.name, adminSelectedDate).assignedCount}건 · ${driverWorkStats(dispatchDeliveries, driver.name, adminSelectedDate).percent}%`,
+          driver.status === "승인 완료" ? driverWorkStats(dispatchDeliveries, driver.name, adminSelectedDate).status : driver.status,
         ]),
         actions: ["기사 승인", "승인 보류", "담당 구역 배정", "출근/퇴근 기록 확인"],
       };
@@ -3550,12 +3684,12 @@ function AdminArea() {
         title: "보냉백 회수 관리",
         subtitle: "고객별 보냉백 회수 필요 수량과 기사 회수 처리 상태를 확인합니다.",
         metrics: [
-          ["회수 필요", `${dispatchDeliveries.reduce((sum, delivery) => sum + (delivery.bagCollected ? 0 : delivery.bagCount), 0)}개`],
-          ["회수 완료", `${dispatchDeliveries.reduce((sum, delivery) => sum + (delivery.bagCollected ? delivery.bagCount : 0), 0)}개`],
-          ["미회수 고객", `${dispatchDeliveries.filter((delivery) => delivery.bagCount > 0 && !delivery.bagCollected).length}명`],
-          ["회수 없음", `${dispatchDeliveries.filter((delivery) => delivery.bagCount === 0).length}건`],
+          ["회수 필요", `${dateDeliveries.reduce((sum, delivery) => sum + (delivery.bagCollected ? 0 : delivery.bagCount), 0)}개`],
+          ["회수 완료", `${dateDeliveries.reduce((sum, delivery) => sum + (delivery.bagCollected ? delivery.bagCount : 0), 0)}개`],
+          ["미회수 고객", `${dateDeliveries.filter((delivery) => delivery.bagCount > 0 && !delivery.bagCollected).length}명`],
+          ["회수 없음", `${dateDeliveries.filter((delivery) => delivery.bagCount === 0).length}건`],
         ],
-        rows: dispatchDeliveries.map((delivery) => [
+        rows: dateDeliveries.map((delivery) => [
           delivery.customer,
           `${delivery.bagCount}개 · ${delivery.assignedDriver ?? "미배정"} 기사 · ${delivery.address}`,
           bagStatus(delivery),
@@ -3627,10 +3761,10 @@ function AdminArea() {
       title: "운영 현황",
       subtitle: "오늘은 아래 순서대로만 처리하면 됩니다.",
       metrics: [
-        ["주소 확인", `${dispatchDeliveries.filter((delivery) => !delivery.addressConfirmed).length}건`],
-        ["주문 준비", `${dispatchDeliveries.filter((delivery) => delivery.addressConfirmed && !delivery.orderPrepared).length}건`],
-        ["배송 배정", `${dispatchDeliveries.filter((delivery) => delivery.orderPrepared && !delivery.assignedDriver).length}건`],
-        ["보냉백 회수", `${dispatchDeliveries.filter((delivery) => delivery.bagCount > 0 && !delivery.bagCollected).length}건`],
+        ["주소 확인", `${dateDeliveries.filter((delivery) => !delivery.addressConfirmed).length}건`],
+        ["주문 준비", `${dateDeliveries.filter((delivery) => delivery.addressConfirmed && !delivery.orderPrepared).length}건`],
+        ["배송 배정", `${dateDeliveries.filter((delivery) => delivery.orderPrepared && !delivery.assignedDriver).length}건`],
+        ["보냉백 회수", `${dateDeliveries.filter((delivery) => delivery.bagCount > 0 && !delivery.bagCollected).length}건`],
       ],
       rows: [
         ["1. 고객 확인", nextAddressCheck ? `${nextAddressCheck.customer} 주소를 확인하세요.` : "모든 주소 확인 완료", nextAddressCheck ? "확인 필요" : "완료"],
@@ -3640,7 +3774,7 @@ function AdminArea() {
       ],
       actions: ["다음 할 일 처리", "상세 관리 보기", "데모 초기화"],
     };
-  }, [adminAccounts, adminProducts, assignedDeliveries, dispatchDeliveries, naverOrders, nextAddressCheck, nextBagCollect, nextDispatch, nextOrderPrepare, tab, unassignedDeliveries, zoneAssignments]);
+  }, [adminAccounts, adminProducts, adminSelectedDate, approvedDrivers, assignedDeliveries, dateDeliveries, dispatchDeliveries, driverProfiles, naverOrders, nextAddressCheck, nextBagCollect, nextDispatch, nextOrderPrepare, tab, unassignedDeliveries]);
 
   const filteredRows = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -3705,9 +3839,20 @@ function AdminArea() {
               <h1>{content.title}</h1>
               <p>{content.subtitle}</p>
             </div>
-            <IonButton onClick={handleNewRegistration}>
-              {primaryActionLabel()}
-            </IonButton>
+            <div className="admin-page-actions">
+              <label className="admin-date-picker">
+                <IonIcon icon={calendarOutline} />
+                <input
+                  aria-label="운영 날짜"
+                  type="date"
+                  value={adminSelectedDate}
+                  onChange={(event) => setAdminSelectedDate(event.currentTarget.value)}
+                />
+              </label>
+              <IonButton onClick={handleNewRegistration}>
+                {primaryActionLabel()}
+              </IonButton>
+            </div>
           </div>
           <AdminFilterPanel
             onSearchTermChange={setSearchTerm}
@@ -3775,15 +3920,24 @@ function AdminArea() {
                   zoneAssignments={zoneAssignments}
                 />
               ) : tab === "customers" ? (
-                <CustomerManagement deliveries={dispatchDeliveries} onUpdateCustomer={updateCustomer} />
+                <CustomerManagement deliveries={dispatchDeliveries} selectedDate={adminSelectedDate} onUpdateCustomer={updateCustomer} />
               ) : tab === "orders" ? (
-                <OrderManagement deliveries={dispatchDeliveries} onAutoAssign={autoAssignDelivery} onUpdateDelivery={updateDelivery} />
+                <OrderManagement
+                  deliveries={dateDeliveries}
+                  deliveryZones={deliveryZones}
+                  onAutoAssign={autoAssignDelivery}
+                  onCreateDelivery={createManualDelivery}
+                  onDateChange={setAdminSelectedDate}
+                  onUpdateDelivery={updateDelivery}
+                  selectedDate={adminSelectedDate}
+                />
               ) : tab === "bags" ? (
-                <BagManagement deliveries={dispatchDeliveries} onUpdateDelivery={updateDelivery} />
+                <BagManagement deliveries={dateDeliveries} onUpdateDelivery={updateDelivery} />
               ) : tab === "drivers" ? (
                 <DriverApprovalManagement
                   deliveries={dispatchDeliveries}
                   drivers={driverProfiles}
+                  selectedDate={adminSelectedDate}
                   onUpdateStatus={updateDriverStatus}
                 />
               ) : (
@@ -4301,12 +4455,32 @@ function DetailCell({ label, value }: { label: string; value: string }) {
 function CustomerManagement({
   deliveries,
   onUpdateCustomer,
+  selectedDate,
 }: {
   deliveries: Delivery[];
   onUpdateCustomer: (customerName: string, patch: Partial<Delivery>) => void;
+  selectedDate: string;
 }) {
+  const selectedDateDeliveries = deliveriesForDate(deliveries, selectedDate);
+  const oneTimeCount = deliveries.filter((delivery) => isOneTimeDelivery(delivery, deliveries)).length;
+
   return (
-    <IonList>
+    <>
+      <div className="customer-insight-grid">
+        <div>
+          <span>총회원</span>
+          <strong>{new Set(deliveries.map(customerKey)).size}명</strong>
+        </div>
+        <div>
+          <span>{selectedDate} 배송</span>
+          <strong>{selectedDateDeliveries.length}명</strong>
+        </div>
+        <div>
+          <span>1회용/재주문 없음</span>
+          <strong>{oneTimeCount}명</strong>
+        </div>
+      </div>
+      <IonList>
       {deliveries.map((delivery) => (
         <IonItem key={delivery.id}>
           <IonIcon icon={personCircleOutline} slot="start" />
@@ -4315,6 +4489,9 @@ function CustomerManagement({
             <p>{delivery.phone} · {delivery.email}</p>
             <p>{delivery.address} · {delivery.memo}</p>
           </IonLabel>
+          <IonBadge color={isOneTimeDelivery(delivery, deliveries) ? "warning" : "primary"}>
+            {isOneTimeDelivery(delivery, deliveries) ? "1회용" : "정기"}
+          </IonBadge>
           <IonBadge color={adminBadgeColor(customerStatus(delivery))}>{customerStatus(delivery)}</IonBadge>
           <div className="row-actions" slot="end">
             <IonButton
@@ -4334,58 +4511,152 @@ function CustomerManagement({
           </div>
         </IonItem>
       ))}
-    </IonList>
+      </IonList>
+    </>
   );
 }
 
 function OrderManagement({
+  deliveryZones,
   deliveries,
   onAutoAssign,
+  onCreateDelivery,
+  onDateChange,
   onUpdateDelivery,
+  selectedDate,
 }: {
+  deliveryZones: string[];
   deliveries: Delivery[];
   onAutoAssign: (deliveryId: string) => void;
+  onCreateDelivery: (input: ManualDeliveryInput) => void;
+  onDateChange: (date: string) => void;
   onUpdateDelivery: (deliveryId: string, patch: Partial<Delivery>) => void;
+  selectedDate: string;
 }) {
+  const [form, setForm] = useState<ManualDeliveryInput>({
+    address: "",
+    bagCount: 1,
+    customer: "",
+    deliveryDate: selectedDate,
+    detailAddress: "",
+    email: "",
+    memo: "",
+    phone: "",
+    saladCount: 1,
+    zone: "",
+  });
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    setForm((current) => ({ ...current, deliveryDate: selectedDate }));
+  }, [selectedDate]);
+
+  function updateForm<K extends keyof ManualDeliveryInput>(key: K, value: ManualDeliveryInput[K]) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function submitManualOrder() {
+    if (!form.customer.trim() || !form.phone.trim() || !form.address.trim() || !form.detailAddress.trim()) {
+      setMessage("고객명, 전화번호, 주소, 상세 주소를 입력해주세요.");
+      return;
+    }
+    const resolvedZone = resolveZoneByAddress(form.address, form.detailAddress, deliveryZones);
+    onCreateDelivery({
+      ...form,
+      zone: form.zone || resolvedZone,
+    });
+    setMessage(`주문이 등록되었습니다. 구역: ${form.zone || resolvedZone}`);
+    setForm((current) => ({
+      ...current,
+      address: "",
+      customer: "",
+      detailAddress: "",
+      email: "",
+      memo: "",
+      phone: "",
+      saladCount: 1,
+    }));
+  }
+
   return (
-    <IonList>
-      {deliveries.map((delivery) => (
-        <IonItem key={delivery.id}>
-          <IonIcon icon={clipboardOutline} slot="start" />
-          <IonLabel>
-            <h2>{delivery.orderNo}</h2>
-            <p>{delivery.customer} · {delivery.zone} · {delivery.address}</p>
-            <p>{delivery.memo}</p>
-          </IonLabel>
-          <IonBadge color={adminBadgeColor(orderStatus(delivery))}>{orderStatus(delivery)}</IonBadge>
-          <div className="row-actions" slot="end">
-            <IonButton
-              disabled={delivery.addressConfirmed}
-              fill="outline"
-              size="small"
-              onClick={() => onUpdateDelivery(delivery.id, { addressConfirmed: true })}
-            >
-              주소 확인
-            </IonButton>
-            <IonButton
-              disabled={delivery.orderPrepared}
-              size="small"
-              onClick={() => onUpdateDelivery(delivery.id, { orderPrepared: true })}
-            >
-              준비 완료
-            </IonButton>
-            <IonButton
-              disabled={Boolean(delivery.assignedDriver)}
-              fill="outline"
-              size="small"
-              onClick={() => onAutoAssign(delivery.id)}
-            >
-              자동 배정
-            </IonButton>
-          </div>
-        </IonItem>
-      ))}
-    </IonList>
+    <>
+      <section className="admin-order-create">
+        <div>
+          <strong>달력 주문 등록</strong>
+          <span>배송일을 선택하고 고객 주문을 등록하면 구역과 담당 기사가 자동 반영됩니다.</span>
+        </div>
+        <div className="admin-order-form">
+          <IonInput
+            label="배송일"
+            labelPlacement="stacked"
+            type="date"
+            value={form.deliveryDate}
+            onIonInput={(event) => {
+              const nextDate = String(event.detail.value ?? selectedDate);
+              updateForm("deliveryDate", nextDate);
+              onDateChange(nextDate);
+            }}
+          />
+          <IonInput label="고객명" labelPlacement="stacked" value={form.customer} onIonInput={(event) => updateForm("customer", String(event.detail.value ?? ""))} />
+          <IonInput label="전화번호" labelPlacement="stacked" value={form.phone} onIonInput={(event) => updateForm("phone", String(event.detail.value ?? ""))} />
+          <IonInput label="이메일" labelPlacement="stacked" value={form.email} onIonInput={(event) => updateForm("email", String(event.detail.value ?? ""))} />
+          <IonInput label="주소" labelPlacement="stacked" value={form.address} onIonInput={(event) => updateForm("address", String(event.detail.value ?? ""))} />
+          <IonInput label="상세 주소" labelPlacement="stacked" value={form.detailAddress} onIonInput={(event) => updateForm("detailAddress", String(event.detail.value ?? ""))} />
+          <IonInput label="구역" labelPlacement="stacked" placeholder="비워두면 주소 기준 자동 선택" value={form.zone} onIonInput={(event) => updateForm("zone", String(event.detail.value ?? ""))} />
+          <IonInput label="샐러드 수량" labelPlacement="stacked" min={1} type="number" value={form.saladCount} onIonInput={(event) => updateForm("saladCount", Math.max(1, Number(event.detail.value ?? 1)))} />
+          <IonInput label="보냉백 수량" labelPlacement="stacked" min={0} type="number" value={form.bagCount} onIonInput={(event) => updateForm("bagCount", Math.max(0, Number(event.detail.value ?? 0)))} />
+          <IonInput label="요청사항" labelPlacement="stacked" value={form.memo} onIonInput={(event) => updateForm("memo", String(event.detail.value ?? ""))} />
+        </div>
+        <div className="admin-order-create-actions">
+          <IonButton onClick={submitManualOrder}>주문 등록</IonButton>
+          <IonButton
+            fill="outline"
+            onClick={() => updateForm("zone", resolveZoneByAddress(form.address, form.detailAddress, deliveryZones))}
+          >
+            주소로 구역 자동 선택
+          </IonButton>
+          {message && <IonChip color="success">{message}</IonChip>}
+        </div>
+      </section>
+      <IonList>
+        {deliveries.map((delivery) => (
+          <IonItem key={delivery.id}>
+            <IonIcon icon={clipboardOutline} slot="start" />
+            <IonLabel>
+              <h2>{delivery.orderNo}</h2>
+              <p>{delivery.customer} · {delivery.zone} · {delivery.address}</p>
+              <p>{delivery.memo}</p>
+            </IonLabel>
+            <IonBadge color={adminBadgeColor(orderStatus(delivery))}>{orderStatus(delivery)}</IonBadge>
+            <div className="row-actions" slot="end">
+              <IonButton
+                disabled={delivery.addressConfirmed}
+                fill="outline"
+                size="small"
+                onClick={() => onUpdateDelivery(delivery.id, { addressConfirmed: true })}
+              >
+                주소 확인
+              </IonButton>
+              <IonButton
+                disabled={delivery.orderPrepared}
+                size="small"
+                onClick={() => onUpdateDelivery(delivery.id, { orderPrepared: true })}
+              >
+                준비 완료
+              </IonButton>
+              <IonButton
+                disabled={Boolean(delivery.assignedDriver)}
+                fill="outline"
+                size="small"
+                onClick={() => onAutoAssign(delivery.id)}
+              >
+                자동 배정
+              </IonButton>
+            </div>
+          </IonItem>
+        ))}
+      </IonList>
+    </>
   );
 }
 
@@ -4434,16 +4705,18 @@ function DriverApprovalManagement({
   deliveries,
   drivers,
   onUpdateStatus,
+  selectedDate,
 }: {
   deliveries: Delivery[];
   drivers: DriverProfile[];
   onUpdateStatus: (driverName: string, status: DriverProfile["status"]) => void;
+  selectedDate: string;
 }) {
   return (
     <IonList>
       {drivers.map((driver) => {
-        const assignedCount = deliveries.filter((delivery) => delivery.assignedDriver === driver.name).length;
-        const completedCount = deliveries.filter((delivery) => delivery.assignedDriver === driver.name && delivery.done).length;
+        const stats = driverWorkStats(deliveries, driver.name, selectedDate);
+        const workStatus = driver.status === "승인 완료" ? stats.status : driver.status;
 
         return (
           <IonItem key={driver.name}>
@@ -4451,9 +4724,10 @@ function DriverApprovalManagement({
             <IonLabel>
               <h2>{driver.name}</h2>
               <p>{driver.phone} · 희망/담당 {driver.zone}</p>
-              <p>배정 {assignedCount}건 · 완료 {completedCount}건</p>
+              <p>{selectedDate} · 배정 {stats.assignedCount}건 · 완료 {stats.completedCount}건 · {stats.percent}%</p>
+              <p>샐러드 {stats.saladCount}개 · 보냉백 미회수 {stats.bagMissing}건</p>
             </IonLabel>
-            <IonBadge color={adminBadgeColor(driver.status)}>{driver.status}</IonBadge>
+            <IonBadge color={adminBadgeColor(workStatus)}>{workStatus}</IonBadge>
             <div className="row-actions" slot="end">
               <IonButton
                 disabled={driver.status === "승인 완료"}
@@ -4775,7 +5049,8 @@ function AdminHeader() {
 }
 
 function adminBadgeColor(status: string) {
-  if (status.includes("완료") || status.includes("활성") || status.includes("정상") || status.includes("판매중") || status.includes("준비 완료")) return "success";
+  if (status.includes("완료") || status.includes("활성") || status.includes("정상") || status.includes("판매중") || status.includes("준비 완료") || status.includes("퇴근")) return "success";
+  if (status.includes("출근") || status.includes("배송중")) return "primary";
   if (status.includes("보류") || status.includes("필요") || status.includes("대기") || status.includes("검토") || status.includes("품절") || status.includes("확인")) return "warning";
   return "medium";
 }
