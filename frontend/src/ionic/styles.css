@@ -3389,6 +3389,40 @@ ion-card {
   font-weight: 900;
 }
 
+.admin-order-type-tabs {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-order-type-tabs button {
+  background: #ffffff;
+  border: 1px solid #d8dee8;
+  border-radius: 12px;
+  color: #344054;
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+  min-height: 82px;
+  padding: 16px;
+  text-align: left;
+}
+
+.admin-order-type-tabs button.active {
+  background: #eff6ff;
+  border-color: #155eef;
+  box-shadow: 0 0 0 3px rgba(21, 94, 239, 0.12);
+}
+
+.admin-order-type-tabs button strong {
+  color: #182230;
+  font-size: 17px;
+}
+
+.admin-order-type-tabs button.active strong {
+  color: #155eef;
+}
+
 .admin-order-date-panel {
   align-items: stretch;
   background: #ffffff;
@@ -3466,6 +3500,53 @@ ion-card {
   font-weight: 900;
   min-height: 38px;
   padding: 0 10px;
+}
+
+.admin-recurring-options {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d8dee8;
+  border-radius: 12px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(180px, 1fr) minmax(240px, 1.2fr) minmax(160px, 0.6fr);
+  padding: 14px;
+}
+
+.admin-recurring-options > div:first-child {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-recurring-options p {
+  color: #155eef;
+  font-size: 13px;
+  font-weight: 900;
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.admin-weekday-buttons {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.admin-weekday-buttons button {
+  background: #f8fafc;
+  border: 1px solid #d8dee8;
+  border-radius: 999px;
+  color: #344054;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 900;
+  min-height: 42px;
+}
+
+.admin-weekday-buttons button.active {
+  background: #155eef;
+  border-color: #155eef;
+  color: #ffffff;
 }
 
 .admin-order-form {
@@ -3597,12 +3678,15 @@ ion-card {
   .admin-kpis,
   .admin-layout,
   .admin-order-date-panel,
+  .admin-order-type-tabs,
+  .admin-recurring-options,
   .admin-order-form,
   .customer-insight-grid {
     grid-template-columns: 1fr;
   }
 
-  .admin-order-date-buttons {
+  .admin-order-date-buttons,
+  .admin-weekday-buttons {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

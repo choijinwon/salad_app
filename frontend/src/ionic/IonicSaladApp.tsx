@@ -133,11 +133,14 @@ type ManualDeliveryInput = {
   bagCount: number;
   customer: string;
   deliveryDate: string;
+  deliveryType: "REGULAR" | "ONE_TIME";
   detailAddress: string;
   email: string;
   memo: string;
   phone: string;
+  repeatCount: number;
   saladCount: number;
+  weekdays: number[];
   zone: string;
 };
 
@@ -832,14 +835,54 @@ function mapSpringDeliveries(deliveries: SpringDelivery[], customers: SpringCust
   });
 }
 
+function formatInputDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function todayInputValue() {
-  return new Date().toISOString().slice(0, 10);
+  return formatInputDate(new Date());
 }
 
 function addDaysToInputDate(value: string, days: number) {
   const date = new Date(`${value}T00:00:00`);
   date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  return formatInputDate(date);
+}
+
+const weekdayOptions = [
+  { label: "월", value: 1 },
+  { label: "화", value: 2 },
+  { label: "수", value: 3 },
+  { label: "목", value: 4 },
+  { label: "금", value: 5 },
+  { label: "토", value: 6 },
+  { label: "일", value: 0 },
+];
+
+function weekdayFromInputDate(value: string) {
+  return new Date(`${value}T00:00:00`).getDay();
+}
+
+function generateManualDeliveryDates(input: ManualDeliveryInput) {
+  if (input.deliveryType === "ONE_TIME") return [input.deliveryDate];
+
+  const selectedWeekdays = input.weekdays.length > 0 ? input.weekdays : [weekdayFromInputDate(input.deliveryDate)];
+  const targetCount = Math.max(1, input.repeatCount);
+  const dates: string[] = [];
+  let offset = 0;
+
+  while (dates.length < targetCount && offset < 370) {
+    const candidate = addDaysToInputDate(input.deliveryDate, offset);
+    if (selectedWeekdays.includes(weekdayFromInputDate(candidate))) {
+      dates.push(candidate);
+    }
+    offset += 1;
+  }
+
+  return dates;
 }
 
 function compactDetailAddress(address: string) {
@@ -3504,36 +3547,39 @@ function AdminArea() {
   function createManualDelivery(input: ManualDeliveryInput) {
     const zone = input.zone || resolveZoneByAddress(input.address, input.detailAddress, deliveryZones);
     const assignedDriver = zoneAssignments[zone] || null;
-    const nextNumber = dispatchDeliveries.length + 1;
-    const nextDelivery: Delivery = {
-      address: input.address.trim(),
-      addressConfirmed: true,
-      assignedDriver,
-      bagCollected: input.bagCount === 0,
-      bagCount: input.bagCount,
-      customer: input.customer.trim(),
-      customerActive: true,
-      deliveryDate: input.deliveryDate,
-      detailAddress: input.detailAddress.trim(),
-      done: false,
-      driverMemo: "",
-      email: input.email.trim(),
-      id: `manual-${Date.now()}`,
-      lat: 37.501 + (nextNumber % 7) * 0.004,
-      lng: 127.026 + (nextNumber % 9) * 0.005,
-      memo: input.memo.trim() || "요청사항 없음",
-      orderNo: `ORD-${input.deliveryDate.replace(/-/g, "")}-${String(nextNumber).padStart(3, "0")}`,
-      orderPrepared: true,
-      phone: input.phone.trim(),
-      saladCount: input.saladCount,
-      zone,
-    };
+    const deliveryDates = generateManualDeliveryDates(input);
+    const nextDeliveries = deliveryDates.map((deliveryDate, index): Delivery => {
+      const nextNumber = dispatchDeliveries.length + index + 1;
+      return {
+        address: input.address.trim(),
+        addressConfirmed: true,
+        assignedDriver,
+        bagCollected: input.bagCount === 0,
+        bagCount: input.bagCount,
+        customer: input.customer.trim(),
+        customerActive: input.deliveryType === "REGULAR",
+        deliveryDate,
+        detailAddress: input.detailAddress.trim(),
+        done: false,
+        driverMemo: "",
+        email: input.email.trim(),
+        id: `manual-${Date.now()}-${index}`,
+        lat: 37.501 + (nextNumber % 7) * 0.004,
+        lng: 127.026 + (nextNumber % 9) * 0.005,
+        memo: [input.deliveryType === "ONE_TIME" ? "1회용 배송" : "정기배송", input.memo.trim() || "요청사항 없음"].join(" · "),
+        orderNo: `ORD-${deliveryDate.replace(/-/g, "")}-${String(nextNumber).padStart(3, "0")}`,
+        orderPrepared: true,
+        phone: input.phone.trim(),
+        saladCount: input.saladCount,
+        zone,
+      };
+    });
 
     if (!deliveryZones.includes(zone)) {
       updateDeliveryZones([...deliveryZones, zone]);
     }
-    updateDispatchDeliveries([...dispatchDeliveries, nextDelivery]);
-    setApiStatus(`주문 등록 완료 · ${zone}${assignedDriver ? ` · ${assignedDriver} 기사 자동 배정` : ""}`);
+    updateDispatchDeliveries([...dispatchDeliveries, ...nextDeliveries]);
+    setApiStatus(`${input.deliveryType === "ONE_TIME" ? "1회용" : "정기"} 주문 ${nextDeliveries.length}건 등록 완료 · ${zone}${assignedDriver ? ` · ${assignedDriver} 기사 자동 배정` : ""}`);
   }
 
   async function registerDriverProfile() {
@@ -4538,11 +4584,14 @@ function OrderManagement({
     bagCount: 1,
     customer: "",
     deliveryDate: selectedDate,
+    deliveryType: "REGULAR",
     detailAddress: "",
     email: "",
     memo: "",
     phone: "",
+    repeatCount: 12,
     saladCount: 1,
+    weekdays: [weekdayFromInputDate(selectedDate)],
     zone: "",
   });
   const [message, setMessage] = useState("");
@@ -4557,7 +4606,11 @@ function OrderManagement({
   );
 
   useEffect(() => {
-    setForm((current) => ({ ...current, deliveryDate: selectedDate }));
+    setForm((current) => ({
+      ...current,
+      deliveryDate: selectedDate,
+      weekdays: current.weekdays.length <= 1 ? [weekdayFromInputDate(selectedDate)] : current.weekdays,
+    }));
   }, [selectedDate]);
 
   function updateForm<K extends keyof ManualDeliveryInput>(key: K, value: ManualDeliveryInput[K]) {
@@ -4565,8 +4618,31 @@ function OrderManagement({
   }
 
   function selectDeliveryDate(nextDate: string) {
-    updateForm("deliveryDate", nextDate);
+    setForm((current) => ({
+      ...current,
+      deliveryDate: nextDate,
+      weekdays: current.weekdays.length <= 1 ? [weekdayFromInputDate(nextDate)] : current.weekdays,
+    }));
     onDateChange(nextDate);
+  }
+
+  function selectDeliveryType(deliveryType: ManualDeliveryInput["deliveryType"]) {
+    setForm((current) => ({
+      ...current,
+      deliveryType,
+      repeatCount: deliveryType === "ONE_TIME" ? 1 : Math.max(current.repeatCount, 4),
+      weekdays: deliveryType === "ONE_TIME" ? [weekdayFromInputDate(current.deliveryDate)] : current.weekdays,
+    }));
+  }
+
+  function toggleWeekday(weekday: number) {
+    setForm((current) => {
+      const exists = current.weekdays.includes(weekday);
+      const weekdays = exists
+        ? current.weekdays.filter((item) => item !== weekday)
+        : [...current.weekdays, weekday].sort((a, b) => a - b);
+      return { ...current, weekdays: weekdays.length > 0 ? weekdays : [weekdayFromInputDate(current.deliveryDate)] };
+    });
   }
 
   function submitManualOrder() {
@@ -4575,11 +4651,15 @@ function OrderManagement({
       return;
     }
     const resolvedZone = resolveZoneByAddress(form.address, form.detailAddress, deliveryZones);
+    const deliveryDates = generateManualDeliveryDates({
+      ...form,
+      zone: form.zone || resolvedZone,
+    });
     onCreateDelivery({
       ...form,
       zone: form.zone || resolvedZone,
     });
-    setMessage(`주문이 등록되었습니다. 구역: ${form.zone || resolvedZone}`);
+    setMessage(`${form.deliveryType === "ONE_TIME" ? "1회용 배송" : "정기배송"} ${deliveryDates.length}건이 등록되었습니다.`);
     setForm((current) => ({
       ...current,
       address: "",
@@ -4588,6 +4668,7 @@ function OrderManagement({
       email: "",
       memo: "",
       phone: "",
+      repeatCount: current.deliveryType === "ONE_TIME" ? 1 : current.repeatCount,
       saladCount: 1,
     }));
   }
@@ -4597,11 +4678,29 @@ function OrderManagement({
       <section className="admin-order-create">
         <div>
           <strong>주문 등록</strong>
-          <span>먼저 배송일을 고른 뒤 고객 정보만 입력하면 구역과 담당 기사가 자동 반영됩니다.</span>
+          <span>정기배송과 1회용 배송을 구분해 등록합니다. 정기배송은 선택한 요일과 횟수만큼 자동 생성됩니다.</span>
+        </div>
+        <div className="admin-order-type-tabs">
+          <button
+            className={form.deliveryType === "REGULAR" ? "active" : ""}
+            onClick={() => selectDeliveryType("REGULAR")}
+            type="button"
+          >
+            <strong>정기배송</strong>
+            <span>요일과 횟수로 여러 배송일 생성</span>
+          </button>
+          <button
+            className={form.deliveryType === "ONE_TIME" ? "active" : ""}
+            onClick={() => selectDeliveryType("ONE_TIME")}
+            type="button"
+          >
+            <strong>1회용 배송</strong>
+            <span>선택한 날짜 하루만 배송</span>
+          </button>
         </div>
         <div className="admin-order-date-panel">
           <div>
-            <span>선택된 배송일</span>
+            <span>{form.deliveryType === "ONE_TIME" ? "배송일" : "시작일"}</span>
             <strong>{form.deliveryDate}</strong>
           </div>
           <div className="admin-order-date-buttons">
@@ -4626,6 +4725,38 @@ function OrderManagement({
             />
           </label>
         </div>
+        {form.deliveryType === "REGULAR" && (
+          <div className="admin-recurring-options">
+            <div>
+              <strong>배송 요일</strong>
+              <span>여러 요일을 선택하면 선택 횟수만큼 배송일이 자동 생성됩니다.</span>
+            </div>
+            <div className="admin-weekday-buttons">
+              {weekdayOptions.map((weekday) => (
+                <button
+                  className={form.weekdays.includes(weekday.value) ? "active" : ""}
+                  key={weekday.value}
+                  onClick={() => toggleWeekday(weekday.value)}
+                  type="button"
+                >
+                  {weekday.label}
+                </button>
+              ))}
+            </div>
+            <IonInput
+              label="생성할 배송 횟수"
+              labelPlacement="stacked"
+              min={1}
+              type="number"
+              value={form.repeatCount}
+              onIonInput={(event) => updateForm("repeatCount", Math.max(1, Number(event.detail.value ?? 1)))}
+            />
+            <p>
+              등록 예정: {generateManualDeliveryDates(form).slice(0, 6).join(", ")}
+              {generateManualDeliveryDates(form).length > 6 ? " ..." : ""}
+            </p>
+          </div>
+        )}
         <div className="admin-order-form">
           <IonInput label="고객명" labelPlacement="stacked" value={form.customer} onIonInput={(event) => updateForm("customer", String(event.detail.value ?? ""))} />
           <IonInput label="전화번호" labelPlacement="stacked" value={form.phone} onIonInput={(event) => updateForm("phone", String(event.detail.value ?? ""))} />
@@ -5101,6 +5232,7 @@ function naverStatusLabel(status: string) {
 }
 
 function customerStatus(delivery: Delivery) {
+  if (!delivery.customerActive && delivery.memo.includes("1회용 배송")) return "1회용";
   if (!delivery.customerActive) return "중지";
   if (!delivery.addressConfirmed) return "주소 확인 필요";
   return "활성";
