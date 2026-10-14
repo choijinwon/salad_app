@@ -1,3 +1,4 @@
+const { validateZoneInput } = require("./lib/zone-geometry.cjs");
 const today = new Date().toISOString().slice(0, 10);
 
 const state = {
@@ -564,9 +565,26 @@ exports.handler = async function handler(event) {
   }
 
   if (path === "/zones" && method === "POST") {
-    const zone = { id: id("zone"), zoneName: body.zoneName, description: body.description || null };
+    const validation = validateZoneInput(body);
+    if (validation) return fail(400, validation);
+    if (state.zones.some((zone) => zone.zoneName === body.zoneName.trim())) return fail(409, "같은 이름의 구역이 있습니다.");
+    const zone = { id: id("zone"), zoneName: body.zoneName.trim(), description: body.description || null, boundary: body.boundary ?? null, color: body.color ?? null };
     state.zones.push(zone);
     return ok(zone, "배송 구역이 등록되었습니다.");
+  }
+
+  const zoneMatch = path.match(/^\/zones\/([^/]+)$/);
+  if (zoneMatch && method === "PATCH") {
+    const zone = state.zones.find((item) => item.id === zoneMatch[1]);
+    if (!zone) return fail(404, "배송 구역을 찾을 수 없습니다.");
+    const validation = validateZoneInput(body);
+    if (validation) return fail(400, validation);
+    if (state.zones.some((item) => item.id !== zone.id && item.zoneName === body.zoneName.trim())) return fail(409, "같은 이름의 구역이 있습니다.");
+    zone.zoneName = body.zoneName.trim();
+    zone.description = body.description ?? zone.description;
+    if (body.boundary != null) zone.boundary = body.boundary;
+    if (body.color != null) zone.color = body.color;
+    return ok(zone, "배송 범위가 저장되었습니다.");
   }
 
   if (path === "/admin/products" && method === "GET") return ok(state.products);

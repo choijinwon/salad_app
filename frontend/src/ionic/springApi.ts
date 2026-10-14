@@ -60,6 +60,8 @@ export type SpringZone = {
   id: string;
   zoneName: string;
   description: string | null;
+  boundary?: number[][] | null;
+  color?: string | null;
 };
 
 export type SpringDelivery = {
@@ -200,6 +202,10 @@ export async function loadSpringSnapshot(): Promise<SpringSnapshot> {
   return { customers, deliveries, drivers, zones };
 }
 
+export function loadSpringZones() {
+  return springRequest<SpringZone[]>("/zones");
+}
+
 export async function loadSpringAdminResources(): Promise<SpringAdminResources> {
   const [products, naverOrders, adminAccounts] = await Promise.all([
     springRequest<SpringAdminProduct[]>("/admin/products"),
@@ -313,7 +319,9 @@ export function assignSpringDelivery(
   });
 }
 
-export function createSpringZone(payload: { zoneName: string; description?: string | null }) {
+type SpringZoneInput = { zoneName: string; description?: string | null; boundary?: number[][]; color?: string };
+
+export function createSpringZone(payload: SpringZoneInput) {
   return springRequest<SpringZone>("/zones", {
     method: "POST",
     body: JSON.stringify(payload),
@@ -322,7 +330,7 @@ export function createSpringZone(payload: { zoneName: string; description?: stri
 
 export function updateSpringZone(
   zoneId: string,
-  payload: { zoneName: string; description?: string | null },
+  payload: SpringZoneInput,
 ) {
   return springRequest<SpringZone>(`/zones/${zoneId}`, {
     method: "PATCH",
