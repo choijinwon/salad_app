@@ -3591,6 +3591,63 @@ ion-card {
   gap: 10px;
 }
 
+.settlement-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.settlement-summary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.settlement-summary > div {
+  background: #f8fafc;
+  border: 1px solid #d9e3f0;
+  border-radius: 12px;
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+}
+
+.settlement-summary span {
+  color: #667085;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.settlement-summary strong {
+  color: #111827;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.settlement-empty {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px dashed #b8c4d6;
+  border-radius: 14px;
+  color: #667085;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  min-height: 180px;
+  padding: 28px;
+  text-align: center;
+}
+
+.settlement-empty ion-icon {
+  color: #155eef;
+  font-size: 36px;
+}
+
+.settlement-empty strong {
+  color: #111827;
+  font-size: 18px;
+  font-weight: 900;
+}
+
 .screen-shell-wide ion-card {
   margin-inline: 0;
 }
@@ -3702,7 +3759,8 @@ ion-card {
   .admin-order-type-tabs,
   .admin-recurring-options,
   .admin-order-form,
-  .customer-insight-grid {
+  .customer-insight-grid,
+  .settlement-summary {
     grid-template-columns: 1fr;
   }
 

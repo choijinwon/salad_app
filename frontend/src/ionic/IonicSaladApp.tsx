@@ -26,6 +26,7 @@ import {
   bagCheckOutline,
   calendarOutline,
   carOutline,
+  cashOutline,
   chevronBackOutline,
   chevronForwardOutline,
   checkmarkCircleOutline,
@@ -77,7 +78,7 @@ import {
 type Area = "customer" | "driver" | "admin";
 type CustomerTab = "home" | "reserve" | "orders" | "profile";
 type DriverTab = "route" | "map" | "done" | "profile";
-type AdminTab = "overview" | "customers" | "orders" | "dispatch" | "drivers" | "bags" | "products" | "naver" | "admins";
+type AdminTab = "overview" | "customers" | "orders" | "dispatch" | "drivers" | "bags" | "settlements" | "products" | "naver" | "admins";
 type SideMenuItem<T extends string> = {
   icon: string;
   label: string;
@@ -109,6 +110,7 @@ type Delivery = {
   done: boolean;
   deliveryDate?: string;
   saladCount?: number;
+  settled?: boolean;
 };
 
 type DriverProfile = {
@@ -145,6 +147,7 @@ type ManualDeliveryInput = {
 };
 
 const initialDeliveryZones = ["강남A", "서초B", "송파C", "잠실D", "마포E", "성수F"];
+const DEFAULT_SALAD_UNIT_PRICE = 8900;
 const demoTodayDate = todayInputValue();
 const demoTomorrowDate = addDaysToInputDate(demoTodayDate, 1);
 
@@ -410,6 +413,7 @@ const adminMenuItems: SideMenuItem<AdminTab>[] = [
   { icon: carOutline, label: "배정", value: "dispatch" },
   { icon: checkmarkCircleOutline, label: "기사", value: "drivers" },
   { icon: bagCheckOutline, label: "보냉백", value: "bags" },
+  { icon: cashOutline, label: "정산", value: "settlements" },
   { icon: clipboardOutline, label: "상품", value: "products" },
   { icon: clipboardOutline, label: "네이버", value: "naver" },
   { icon: settingsOutline, label: "관리자", value: "admins" },
@@ -537,6 +541,7 @@ function normalizeDelivery(delivery: Delivery) {
     orderPrepared: delivery.orderPrepared ?? fallback?.orderPrepared ?? false,
     phone: delivery.phone ?? fallback?.phone ?? "",
     saladCount: delivery.saladCount ?? fallback?.saladCount ?? 1,
+    settled: delivery.settled ?? fallback?.settled ?? false,
   };
 }
 
@@ -3626,6 +3631,11 @@ function AdminArea() {
       setTab("orders");
       return;
     }
+    if (tab === "settlements") {
+      const target = dateDeliveries.find((delivery) => settlementStatus(delivery) === "정산 가능");
+      if (target) updateDelivery(target.id, { settled: true });
+      return;
+    }
     if (tab === "products") {
       addAdminProduct();
       return;
@@ -3646,6 +3656,7 @@ function AdminArea() {
     if (tab === "dispatch") return "+ 구역 등록";
     if (tab === "drivers") return "+ 기사 등록";
     if (tab === "bags") return "주문 등록으로 이동";
+    if (tab === "settlements") return "다음 정산 처리";
     if (tab === "products") return "+ 상품 등록";
     if (tab === "naver") return "+ 네이버 주문";
     if (tab === "admins") return "+ 관리자 초대";
@@ -3744,6 +3755,36 @@ function AdminArea() {
           bagStatus(delivery),
         ]),
         actions: ["회수 완료 처리", "미회수 사유 등록", "고객별 수량 수정", "기사 회수 현황"],
+      };
+    }
+    if (tab === "settlements") {
+      const completedDeliveries = dateDeliveries.filter((delivery) => delivery.done);
+      const settleableDeliveries = completedDeliveries.filter((delivery) => settlementStatus(delivery) === "정산 가능");
+      const settledDeliveries = completedDeliveries.filter((delivery) => delivery.settled);
+      const blockedDeliveries = completedDeliveries.filter((delivery) => settlementStatus(delivery) === "보냉백 확인");
+      return {
+        title: "정산 관리",
+        subtitle: "배송 완료 건만 정산 대상입니다. 보냉백 미회수 건은 확인 후 정산할 수 있습니다.",
+        metrics: [
+          ["완료 배송", `${completedDeliveries.length}건`],
+          ["정산 가능", `${settleableDeliveries.length}건`],
+          ["정산 완료", `${settledDeliveries.length}건`],
+          ["정산 가능액", `${settleableDeliveries.reduce((sum, delivery) => sum + settlementAmount(delivery), 0).toLocaleString()}원`],
+        ],
+        rows: completedDeliveries.length
+          ? completedDeliveries.map((delivery) => [
+              delivery.orderNo,
+              `${delivery.customer} · ${delivery.assignedDriver ?? "미배정"} 기사 · 샐러드 ${delivery.saladCount ?? 1}개 · ${settlementAmount(delivery).toLocaleString()}원`,
+              settlementStatus(delivery),
+              delivery.id,
+            ])
+          : [["정산 대상 없음", "선택한 날짜에 배송 완료된 주문이 없습니다.", "대기"]],
+        actions: [
+          `보냉백 확인 ${blockedDeliveries.length}건`,
+          "정산 가능 건 처리",
+          "정산 내역 확인",
+          "배송 완료 목록 확인",
+        ],
       };
     }
     if (tab === "products") {
@@ -3876,6 +3917,7 @@ function AdminArea() {
           <button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")} type="button">셀러드 운영</button>
           <button className={tab === "customers" || tab === "orders" ? "active" : ""} onClick={() => setTab("orders")} type="button">고객/주문</button>
           <button className={tab === "dispatch" || tab === "drivers" || tab === "bags" ? "active" : ""} onClick={() => setTab("dispatch")} type="button">배송관리</button>
+          <button className={tab === "settlements" ? "active" : ""} onClick={() => setTab("settlements")} type="button">정산</button>
         </div>
         <section className="admin-page-panel">
           <div className="admin-breadcrumb">
@@ -3982,6 +4024,8 @@ function AdminArea() {
                 />
               ) : tab === "bags" ? (
                 <BagManagement deliveries={dateDeliveries} onUpdateDelivery={updateDelivery} />
+              ) : tab === "settlements" ? (
+                <SettlementManagement deliveries={dateDeliveries} onUpdateDelivery={updateDelivery} />
               ) : tab === "drivers" ? (
                 <DriverApprovalManagement
                   deliveries={dispatchDeliveries}
@@ -4078,6 +4122,17 @@ function AdminArea() {
                     </IonButton>
                     <IonButton expand="block" fill="outline" onClick={() => setTab("dispatch")}>배송 배정으로 이동</IonButton>
                     <IonButton expand="block" fill="outline" onClick={resetDispatchDemo}>데모 초기화</IonButton>
+                  </>
+                ) : tab === "settlements" ? (
+                  <>
+                    <IonButton expand="block" onClick={() => {
+                      const target = dateDeliveries.find((delivery) => settlementStatus(delivery) === "정산 가능");
+                      if (target) updateDelivery(target.id, { settled: true });
+                    }}>
+                      다음 정산 완료 처리
+                    </IonButton>
+                    <IonButton expand="block" fill="outline" onClick={() => setTab("bags")}>보냉백 확인으로 이동</IonButton>
+                    <IonButton expand="block" fill="outline" onClick={() => setTab("orders")}>주문 관리 보기</IonButton>
                   </>
                 ) : tab === "products" ? (
                   <>
@@ -4865,6 +4920,85 @@ function BagManagement({
   );
 }
 
+function SettlementManagement({
+  deliveries,
+  onUpdateDelivery,
+}: {
+  deliveries: Delivery[];
+  onUpdateDelivery: (deliveryId: string, patch: Partial<Delivery>) => void;
+}) {
+  const completedDeliveries = deliveries.filter((delivery) => delivery.done);
+  const settleableDeliveries = completedDeliveries.filter((delivery) => settlementStatus(delivery) === "정산 가능");
+  const blockedDeliveries = completedDeliveries.filter((delivery) => settlementStatus(delivery) === "보냉백 확인");
+  const settledDeliveries = completedDeliveries.filter((delivery) => delivery.settled);
+  const settleableAmount = settleableDeliveries.reduce((sum, delivery) => sum + settlementAmount(delivery), 0);
+  const settledAmount = settledDeliveries.reduce((sum, delivery) => sum + settlementAmount(delivery), 0);
+
+  if (completedDeliveries.length === 0) {
+    return (
+      <div className="settlement-empty">
+        <IonIcon icon={cashOutline} />
+        <strong>정산할 완료 배송이 없습니다.</strong>
+        <span>기사 앱에서 배송 완료 처리된 주문만 정산 목록에 표시됩니다.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="settlement-panel">
+      <div className="settlement-summary">
+        <div>
+          <span>정산 가능액</span>
+          <strong>{settleableAmount.toLocaleString()}원</strong>
+        </div>
+        <div>
+          <span>정산 완료액</span>
+          <strong>{settledAmount.toLocaleString()}원</strong>
+        </div>
+        <div>
+          <span>보류 건</span>
+          <strong>{blockedDeliveries.length}건</strong>
+        </div>
+      </div>
+      <IonList>
+        {completedDeliveries.map((delivery) => {
+          const status = settlementStatus(delivery);
+          const canSettle = status === "정산 가능";
+
+          return (
+            <IonItem key={delivery.id}>
+              <IonIcon icon={cashOutline} slot="start" />
+              <IonLabel>
+                <h2>{delivery.customer}</h2>
+                <p>{delivery.orderNo} · {delivery.assignedDriver ?? "미배정"} 기사 · {delivery.deliveryDate ?? "오늘"}</p>
+                <p>샐러드 {delivery.saladCount ?? 1}개 · {settlementAmount(delivery).toLocaleString()}원</p>
+              </IonLabel>
+              <IonBadge color={adminBadgeColor(status)}>{status}</IonBadge>
+              <div className="row-actions" slot="end">
+                <IonButton
+                  disabled={!canSettle}
+                  size="small"
+                  onClick={() => onUpdateDelivery(delivery.id, { settled: true })}
+                >
+                  정산 완료
+                </IonButton>
+                <IonButton
+                  disabled={!delivery.settled}
+                  fill="outline"
+                  size="small"
+                  onClick={() => onUpdateDelivery(delivery.id, { settled: false })}
+                >
+                  정산 취소
+                </IonButton>
+              </div>
+            </IonItem>
+          );
+        })}
+      </IonList>
+    </div>
+  );
+}
+
 function DriverApprovalManagement({
   deliveries,
   drivers,
@@ -5214,7 +5348,7 @@ function AdminHeader() {
 
 function adminBadgeColor(status: string) {
   if (status.includes("완료") || status.includes("활성") || status.includes("정상") || status.includes("판매중") || status.includes("준비 완료") || status.includes("퇴근")) return "success";
-  if (status.includes("출근") || status.includes("배송중")) return "primary";
+  if (status.includes("출근") || status.includes("배송중") || status.includes("가능")) return "primary";
   if (status.includes("보류") || status.includes("필요") || status.includes("대기") || status.includes("검토") || status.includes("품절") || status.includes("확인")) return "warning";
   return "medium";
 }
@@ -5253,10 +5387,21 @@ function bagStatus(delivery: Delivery) {
   return delivery.bagCollected ? "회수 완료" : "회수 필요";
 }
 
+function settlementAmount(delivery: Delivery) {
+  return (delivery.saladCount ?? 1) * DEFAULT_SALAD_UNIT_PRICE;
+}
+
+function settlementStatus(delivery: Delivery) {
+  if (!delivery.done) return "배송 미완료";
+  if (delivery.bagCount > 0 && !delivery.bagCollected) return "보냉백 확인";
+  return delivery.settled ? "정산 완료" : "정산 가능";
+}
+
 function adminRowIcon(tab: AdminTab) {
   if (tab === "orders" || tab === "products" || tab === "naver") return clipboardOutline;
   if (tab === "dispatch" || tab === "drivers") return carOutline;
   if (tab === "bags") return bagCheckOutline;
+  if (tab === "settlements") return cashOutline;
   if (tab === "admins") return settingsOutline;
   return personCircleOutline;
 }
