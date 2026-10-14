@@ -846,8 +846,13 @@ function todayInputValue() {
   return formatInputDate(new Date());
 }
 
+function dateFromInputValue(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 function addDaysToInputDate(value: string, days: number) {
-  const date = new Date(`${value}T00:00:00`);
+  const date = dateFromInputValue(value);
   date.setDate(date.getDate() + days);
   return formatInputDate(date);
 }
@@ -863,7 +868,7 @@ const weekdayOptions = [
 ];
 
 function weekdayFromInputDate(value: string) {
-  return new Date(`${value}T00:00:00`).getDay();
+  return dateFromInputValue(value).getDay();
 }
 
 function generateManualDeliveryDates(input: ManualDeliveryInput) {
@@ -3449,7 +3454,7 @@ function AdminArea() {
         phone: "010-0000-0000",
         address: "서울특별시 강남구 테헤란로 100",
         status: "NEEDS_CONFIRMATION",
-        deliveryDate: new Date().toISOString().slice(0, 10),
+        deliveryDate: todayInputValue(),
       });
       refreshSpringData();
     } catch {
@@ -3492,9 +3497,7 @@ function AdminArea() {
   }
 
   function futureDate(offsetDays: number) {
-    const date = new Date();
-    date.setDate(date.getDate() + offsetDays);
-    return date.toISOString().slice(0, 10);
+    return addDaysToInputDate(todayInputValue(), offsetDays);
   }
 
   function temporaryRegistrationPassword(prefix: string) {
@@ -3520,7 +3523,7 @@ function AdminArea() {
         orderSource: "APP",
         totalCount: 10,
         unitPrice: 8900,
-        startDate: new Date().toISOString().slice(0, 10),
+        startDate: todayInputValue(),
       });
       refreshSpringData();
       return registration;
