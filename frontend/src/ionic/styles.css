@@ -3369,13 +3369,13 @@ ion-card {
 }
 
 .admin-order-create {
-  background: #f8fafc;
+  background: #ffffff;
   border: 1px solid #d9e3f0;
   border-radius: 12px;
   display: grid;
-  gap: 16px;
+  gap: 12px;
   margin-bottom: 16px;
-  padding: 18px;
+  padding: 16px;
 }
 
 .admin-order-create > div:first-child {
@@ -3385,13 +3385,13 @@ ion-card {
 
 .admin-order-create strong {
   color: #111827;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 900;
 }
 
 .admin-order-type-tabs {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -3402,9 +3402,9 @@ ion-card {
   color: #344054;
   cursor: pointer;
   display: grid;
-  gap: 6px;
-  min-height: 82px;
-  padding: 16px;
+  gap: 4px;
+  min-height: 58px;
+  padding: 12px 14px;
   text-align: left;
 }
 
@@ -3416,11 +3416,16 @@ ion-card {
 
 .admin-order-type-tabs button strong {
   color: #182230;
-  font-size: 17px;
+  font-size: 15px;
 }
 
 .admin-order-type-tabs button.active strong {
   color: #155eef;
+}
+
+.admin-order-type-tabs button span {
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .admin-order-date-panel {
@@ -3429,9 +3434,9 @@ ion-card {
   border: 1px solid #d8dee8;
   border-radius: 12px;
   display: grid;
-  gap: 14px;
-  grid-template-columns: minmax(160px, 0.7fr) minmax(260px, 1.5fr) minmax(170px, 0.8fr);
-  padding: 14px;
+  gap: 10px;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(260px, 1.2fr) minmax(180px, 0.85fr);
+  padding: 12px;
 }
 
 .admin-order-date-panel > div:first-child {
@@ -3439,18 +3444,18 @@ ion-card {
   border: 1px solid #c7ddff;
   border-radius: 10px;
   display: grid;
-  gap: 6px;
-  padding: 14px;
+  gap: 4px;
+  padding: 12px;
 }
 
 .admin-order-date-panel > div:first-child strong {
   color: #155eef;
-  font-size: 24px;
+  font-size: 20px;
 }
 
 .admin-order-date-buttons {
   display: grid;
-  gap: 8px;
+  gap: 7px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
@@ -3463,9 +3468,9 @@ ion-card {
   display: grid;
   font-size: 14px;
   font-weight: 900;
-  gap: 5px;
-  min-height: 70px;
-  padding: 10px;
+  gap: 3px;
+  min-height: 56px;
+  padding: 8px 10px;
   text-align: center;
 }
 
@@ -3487,8 +3492,9 @@ ion-card {
   border: 1px dashed #b8c4d6;
   border-radius: 10px;
   display: grid;
-  gap: 8px;
-  padding: 12px;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px;
 }
 
 .admin-order-calendar-fallback input {
@@ -3499,7 +3505,9 @@ ion-card {
   font-size: 14px;
   font-weight: 900;
   min-height: 38px;
+  min-width: 0;
   padding: 0 10px;
+  width: 100%;
 }
 
 .admin-recurring-options {
@@ -3508,9 +3516,9 @@ ion-card {
   border: 1px solid #d8dee8;
   border-radius: 12px;
   display: grid;
-  gap: 14px;
-  grid-template-columns: minmax(180px, 1fr) minmax(240px, 1.2fr) minmax(160px, 0.6fr);
-  padding: 14px;
+  gap: 12px;
+  grid-template-columns: minmax(170px, 0.8fr) minmax(250px, 1.1fr) minmax(150px, 0.65fr);
+  padding: 12px;
 }
 
 .admin-recurring-options > div:first-child {
@@ -3523,12 +3531,14 @@ ion-card {
   font-size: 13px;
   font-weight: 900;
   grid-column: 1 / -1;
+  line-height: 1.5;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .admin-weekday-buttons {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
@@ -3540,13 +3550,24 @@ ion-card {
   cursor: pointer;
   font-size: 14px;
   font-weight: 900;
-  min-height: 42px;
+  min-height: 38px;
 }
 
 .admin-weekday-buttons button.active {
   background: #155eef;
   border-color: #155eef;
   color: #ffffff;
+}
+
+.admin-recurring-options ion-input {
+  --background: #f8fafc;
+  --border-color: #d8dee8;
+  --border-radius: 10px;
+  --border-style: solid;
+  --border-width: 1px;
+  --padding-start: 12px;
+  --padding-end: 12px;
+  min-width: 0;
 }
 
 .admin-order-form {
