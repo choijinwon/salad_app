@@ -4546,6 +4546,15 @@ function OrderManagement({
     zone: "",
   });
   const [message, setMessage] = useState("");
+  const quickDates = useMemo(
+    () => [
+      { label: "오늘", value: todayInputValue() },
+      { label: "내일", value: addDaysToInputDate(todayInputValue(), 1) },
+      { label: "모레", value: addDaysToInputDate(todayInputValue(), 2) },
+      { label: "일주일 뒤", value: addDaysToInputDate(todayInputValue(), 7) },
+    ],
+    [],
+  );
 
   useEffect(() => {
     setForm((current) => ({ ...current, deliveryDate: selectedDate }));
@@ -4553,6 +4562,11 @@ function OrderManagement({
 
   function updateForm<K extends keyof ManualDeliveryInput>(key: K, value: ManualDeliveryInput[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function selectDeliveryDate(nextDate: string) {
+    updateForm("deliveryDate", nextDate);
+    onDateChange(nextDate);
   }
 
   function submitManualOrder() {
@@ -4582,21 +4596,37 @@ function OrderManagement({
     <>
       <section className="admin-order-create">
         <div>
-          <strong>달력 주문 등록</strong>
-          <span>배송일을 선택하고 고객 주문을 등록하면 구역과 담당 기사가 자동 반영됩니다.</span>
+          <strong>주문 등록</strong>
+          <span>먼저 배송일을 고른 뒤 고객 정보만 입력하면 구역과 담당 기사가 자동 반영됩니다.</span>
+        </div>
+        <div className="admin-order-date-panel">
+          <div>
+            <span>선택된 배송일</span>
+            <strong>{form.deliveryDate}</strong>
+          </div>
+          <div className="admin-order-date-buttons">
+            {quickDates.map((date) => (
+              <button
+                className={form.deliveryDate === date.value ? "active" : ""}
+                key={date.label}
+                onClick={() => selectDeliveryDate(date.value)}
+                type="button"
+              >
+                {date.label}
+                <small>{date.value.slice(5).replace("-", ".")}</small>
+              </button>
+            ))}
+          </div>
+          <label className="admin-order-calendar-fallback">
+            <span>다른 날짜</span>
+            <input
+              type="date"
+              value={form.deliveryDate}
+              onChange={(event) => selectDeliveryDate(event.currentTarget.value)}
+            />
+          </label>
         </div>
         <div className="admin-order-form">
-          <IonInput
-            label="배송일"
-            labelPlacement="stacked"
-            type="date"
-            value={form.deliveryDate}
-            onIonInput={(event) => {
-              const nextDate = String(event.detail.value ?? selectedDate);
-              updateForm("deliveryDate", nextDate);
-              onDateChange(nextDate);
-            }}
-          />
           <IonInput label="고객명" labelPlacement="stacked" value={form.customer} onIonInput={(event) => updateForm("customer", String(event.detail.value ?? ""))} />
           <IonInput label="전화번호" labelPlacement="stacked" value={form.phone} onIonInput={(event) => updateForm("phone", String(event.detail.value ?? ""))} />
           <IonInput label="이메일" labelPlacement="stacked" value={form.email} onIonInput={(event) => updateForm("email", String(event.detail.value ?? ""))} />
