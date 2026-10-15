@@ -12,6 +12,8 @@ public interface DeliveryScheduleRepository extends JpaRepository<DeliverySchedu
 
     List<DeliverySchedule> findByDeliveryDate(LocalDate deliveryDate);
 
+    List<DeliverySchedule> findByDeliveryDateBetweenOrderByDeliveryDateAscRouteOrderAsc(LocalDate from, LocalDate to);
+
     Optional<DeliverySchedule> findBySubscriptionIdAndDeliveryDate(UUID subscriptionId, LocalDate deliveryDate);
 
     List<DeliverySchedule> findByDriverIdAndDeliveryDate(UUID driverId, LocalDate deliveryDate);

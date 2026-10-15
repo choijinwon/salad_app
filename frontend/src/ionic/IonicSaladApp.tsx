@@ -37,7 +37,6 @@ import {
   logInOutline,
   logOutOutline,
   mapOutline,
-  notificationsOutline,
   personCircleOutline,
   refreshOutline,
   searchOutline,
@@ -46,6 +45,8 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DeliveryCoverageManagement, type CoverageMapApi, type CoverageSaveInput } from "./DeliveryCoverageManagement";
 import { pointInZone, zonePolygonError } from "./deliveryCoverage";
+import { AdminCalendarDashboard, AdminDataSource, AdminSettlementWorkspace } from "./AdminCalendarDashboard";
+import { deliveryAmount, deliverySettlementStatus, filterPeriod, monthCells, monthRange, periodRange, seoulToday, shiftCalendarDate, type DateRange } from "./adminCalendar";
 import {
   assignSpringDelivery,
   completeSpringDelivery,
@@ -407,7 +408,7 @@ const driverMenuItems: SideMenuItem<DriverTab>[] = [
   { icon: personCircleOutline, label: "내 정보", value: "profile" },
 ];
 const adminMenuItems: SideMenuItem<AdminTab>[] = [
-  { icon: homeOutline, label: "오늘", value: "overview" },
+  { icon: calendarOutline, label: "대시보드", value: "overview" },
   { icon: personCircleOutline, label: "고객", value: "customers" },
   { icon: clipboardOutline, label: "주문", value: "orders" },
   { icon: carOutline, label: "배정", value: "dispatch" },
@@ -509,22 +510,22 @@ function appTitle(area: Area) {
   return "Salad Admin Web";
 }
 
-function readDispatchDeliveries() {
-  if (typeof window === "undefined") return initialDeliveries;
+function readDispatchDeliveries(includeDemo = true) {
+  if (typeof window === "undefined") return includeDemo ? initialDeliveries : [];
 
   const saved = window.localStorage.getItem(DISPATCH_STORAGE_KEY);
-  if (!saved) return initialDeliveries;
+  if (!saved) return includeDemo ? initialDeliveries : [];
 
 	  try {
 	    const parsed = JSON.parse(saved) as Delivery[];
-	    if (!Array.isArray(parsed) || parsed.length === 0) return initialDeliveries;
+	    if (!Array.isArray(parsed) || parsed.length === 0) return includeDemo ? initialDeliveries : [];
 	    const normalized = parsed.map(normalizeDelivery);
 	    const missingInitialDeliveries = initialDeliveries.filter(
 	      (delivery) => !normalized.some((savedDelivery) => savedDelivery.id === delivery.id),
 	    );
-	    return [...normalized, ...missingInitialDeliveries];
+	    return includeDemo ? [...normalized, ...missingInitialDeliveries] : normalized;
 	  } catch {
-	    return initialDeliveries;
+	    return includeDemo ? initialDeliveries : [];
 	  }
 }
 
@@ -535,7 +536,7 @@ function normalizeDelivery(delivery: Delivery) {
     ...delivery,
     addressConfirmed: delivery.addressConfirmed ?? fallback?.addressConfirmed ?? false,
     customerActive: delivery.customerActive ?? fallback?.customerActive ?? true,
-    deliveryDate: normalizeDemoDeliveryDate(delivery.deliveryDate ?? fallback?.deliveryDate ?? todayInputValue()),
+    deliveryDate: delivery.deliveryDate ?? fallback?.deliveryDate ?? todayInputValue(),
     detailAddress: delivery.detailAddress ?? fallback?.detailAddress ?? delivery.address,
     driverMemo: delivery.driverMemo ?? fallback?.driverMemo ?? "",
     email: delivery.email ?? fallback?.email ?? "",
@@ -544,12 +545,6 @@ function normalizeDelivery(delivery: Delivery) {
     saladCount: delivery.saladCount ?? fallback?.saladCount ?? 1,
     settled: delivery.settled ?? fallback?.settled ?? false,
   };
-}
-
-function normalizeDemoDeliveryDate(deliveryDate: string) {
-  if (deliveryDate === "2026-07-06") return demoTodayDate;
-  if (deliveryDate === "2026-07-07") return demoTomorrowDate;
-  return deliveryDate;
 }
 
 function saveDispatchDeliveries(deliveries: Delivery[]) {
@@ -1003,7 +998,7 @@ function applySpringSnapshot(
   const assignments = buildSpringZoneAssignments(snapshot.drivers, snapshot.zones);
   syncSpringZoneRanges(snapshot.zones);
 
-  if (deliveries.length > 0) setDispatchDeliveries(deliveries);
+  setDispatchDeliveries(deliveries);
   if (drivers.length > 0) setDriverProfiles(drivers);
   if (zones.length > 0) setDeliveryZones(zones);
   setZoneAssignments(assignments);
@@ -2884,27 +2879,45 @@ function AdminArea() {
   const [loggedIn, setLoggedIn] = useState(() => readAdminSession());
   const [tab, setTab] = useState<AdminTab>("overview");
   const [apiStatus, setApiStatus] = useState("데모 데이터");
-  const [dispatchDeliveries, setDispatchDeliveries] = useState(() => readDispatchDeliveries());
+  const [dispatchDeliveries, setDispatchDeliveries] = useState(() => readDispatchDeliveries(false));
   const [driverProfiles, setDriverProfiles] = useState(() => readDriverProfiles());
   const [deliveryZones, setDeliveryZones] = useState(() => readDeliveryZones());
   const [springZones, setSpringZones] = useState<SpringZone[]>([]);
   const [coverageRanges, setCoverageRanges] = useState(() => readZoneRanges());
   const [coverageNewRequest, setCoverageNewRequest] = useState(0);
   const [settlementDemoMode, setSettlementDemoMode] = useState(true);
-  const [settlementSamples, setSettlementSamples] = useState(() => buildSettlementSamples(todayInputValue()));
+  const [settlementSamples, setSettlementSamples] = useState(() => buildSettlementSamples(seoulToday()));
+  const [settlementMarks, setSettlementMarks] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem("salad_admin_settlement_marks") ?? "{}");
+      return Object.fromEntries(Object.entries(saved).filter(([, value]) => typeof value === "boolean")) as Record<string, boolean>;
+    } catch { return {}; }
+  });
+  const [calendarMonth, setCalendarMonth] = useState(() => monthRange(seoulToday()).from);
+  const [settlementRange, setSettlementRange] = useState<DateRange>(() => periodRange("month"));
+  const [dataLoading, setDataLoading] = useState(false);
+  const [dataError, setDataError] = useState("");
+  const refreshRequestRef = useRef(0);
   const [adminProducts, setAdminProducts] = useState<SpringAdminProduct[]>([]);
   const [naverOrders, setNaverOrders] = useState<SpringNaverOrder[]>([]);
   const [adminAccounts, setAdminAccounts] = useState<SpringAdminAccount[]>([]);
   const [menuCollapsed, setMenuCollapsed] = useState(false);
   const [newZoneName, setNewZoneName] = useState("");
-  const [adminSelectedDate, setAdminSelectedDate] = useState(() => todayInputValue());
+  const [adminSelectedDate, setAdminSelectedDate] = useState(() => seoulToday());
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("전체");
   const [selectedAdminListDeliveryId, setSelectedAdminListDeliveryId] = useState<string | null>(null);
   const [zoneAssignments, setZoneAssignments] = useState(() => readZoneAssignments());
   const approvedDrivers = driverProfiles.filter((driver) => driver.status === "승인 완료");
-  const dateDeliveries = useMemo(() => deliveriesForDate(dispatchDeliveries, adminSelectedDate), [adminSelectedDate, dispatchDeliveries]);
-  const settlementDeliveries = settlementDemoMode ? settlementSamples : dateDeliveries;
+  const actualDeliveries = useMemo(() => dispatchDeliveries.map((delivery) => ({ ...delivery, settled: settlementMarks[delivery.id] ?? delivery.settled })), [dispatchDeliveries, settlementMarks]);
+  const dateDeliveries = useMemo(() => deliveriesForDate(actualDeliveries, adminSelectedDate), [adminSelectedDate, actualDeliveries]);
+  const overviewDeliveries = settlementDemoMode ? settlementSamples : actualDeliveries;
+  const settlementDeliveries = useMemo(() => filterPeriod(settlementDemoMode ? settlementSamples : actualDeliveries, settlementRange), [settlementDemoMode, settlementSamples, actualDeliveries, settlementRange]);
+  const queryRange = useMemo(() => {
+    if (tab === "overview") { const cells = monthCells(calendarMonth); return { from: cells[0], to: cells[cells.length - 1] }; }
+    if (tab === "settlements") return settlementRange;
+    return { from: adminSelectedDate, to: adminSelectedDate };
+  }, [tab, calendarMonth, settlementRange, adminSelectedDate]);
   const unassignedDeliveries = dateDeliveries.filter((delivery) => !delivery.assignedDriver);
   const assignedDeliveries = dateDeliveries.filter((delivery) => delivery.assignedDriver);
   const nextAddressCheck = dateDeliveries.find((delivery) => !delivery.addressConfirmed);
@@ -2913,11 +2926,7 @@ function AdminArea() {
   const nextBagCollect = dateDeliveries.find((delivery) => delivery.bagCount > 0 && !delivery.bagCollected);
 
   useEffect(() => {
-    setSettlementSamples(buildSettlementSamples(adminSelectedDate));
-  }, [adminSelectedDate]);
-
-  useEffect(() => {
-    const syncDispatchDeliveries = () => setDispatchDeliveries(readDispatchDeliveries());
+    const syncDispatchDeliveries = () => setDispatchDeliveries(readDispatchDeliveries(false));
     const syncDriverProfiles = () => setDriverProfiles(readDriverProfiles());
     const syncDeliveryZones = () => setDeliveryZones(readDeliveryZones());
     const syncZoneAssignments = () => setZoneAssignments(readZoneAssignments());
@@ -2940,10 +2949,17 @@ function AdminArea() {
   }, []);
 
   function refreshSpringData() {
+    const request = ++refreshRequestRef.current;
+    setDataLoading(true);
+    setDataError("");
     setApiStatus("Spring API 연결 확인중");
-    Promise.all([loadSpringSnapshot(), loadSpringAdminResources()])
+    Promise.all([loadSpringSnapshot(queryRange), loadSpringAdminResources()])
       .then(([snapshot, adminResources]) => {
-        applySpringSnapshot(snapshot, setDispatchDeliveries, setDriverProfiles, setDeliveryZones, setZoneAssignments);
+        if (request !== refreshRequestRef.current) return;
+        applySpringSnapshot(snapshot, (serverDeliveries) => {
+          const localOrders = readDispatchDeliveries(false).filter((delivery) => delivery.id.startsWith("manual-"));
+          setDispatchDeliveries(mergeDeliveriesById(serverDeliveries, localOrders));
+        }, setDriverProfiles, setDeliveryZones, setZoneAssignments);
         setSpringZones(snapshot.zones);
         setAdminProducts(adminResources.products);
         setNaverOrders(adminResources.naverOrders);
@@ -2951,8 +2967,10 @@ function AdminArea() {
         setApiStatus("Spring API 연결됨");
       })
       .catch(() => {
-        setApiStatus("데모 데이터 사용중");
-      });
+        if (request !== refreshRequestRef.current) return;
+        setDataError("선택한 기간의 데이터를 불러오지 못했습니다. 새로고침으로 다시 시도해주세요.");
+        setApiStatus("서버 연결 확인 필요");
+      }).finally(() => { if (request === refreshRequestRef.current) setDataLoading(false); });
   }
 
   function logoutAdmin() {
@@ -2964,7 +2982,8 @@ function AdminArea() {
 
   useEffect(() => {
     if (loggedIn) refreshSpringData();
-  }, [loggedIn]);
+    return () => { refreshRequestRef.current++; };
+  }, [loggedIn, queryRange.from, queryRange.to]);
 
   function updateDispatchDeliveries(nextDeliveries: Delivery[]) {
     setDispatchDeliveries(nextDeliveries);
@@ -3055,7 +3074,31 @@ function AdminArea() {
 
   function updateSettlement(deliveryId: string, patch: Partial<Delivery>) {
     if (settlementDemoMode) setSettlementSamples((samples) => samples.map((delivery) => delivery.id === deliveryId ? { ...delivery, ...patch } : delivery));
-    else updateDelivery(deliveryId, patch);
+    else {
+      if (patch.settled !== undefined) {
+        const next = { ...settlementMarks, [deliveryId]: patch.settled };
+        window.localStorage.setItem("salad_admin_settlement_marks", JSON.stringify(next));
+        setSettlementMarks(next);
+      }
+      updateDelivery(deliveryId, patch);
+    }
+  }
+
+  function selectAdminTab(nextTab: AdminTab) {
+    setSearchTerm("");
+    setStatusFilter("전체");
+    setTab(nextTab);
+  }
+
+  function openCalendarSection(section: "orders" | "dispatch" | "settlements", date: string) {
+    setAdminSelectedDate(date);
+    if (section === "settlements") setSettlementRange({ from: date, to: date });
+    selectAdminTab(section);
+  }
+
+  function changeCalendarMonth(month: string) {
+    setCalendarMonth(month);
+    if (adminSelectedDate.slice(0, 7) !== month.slice(0, 7)) setAdminSelectedDate(month);
   }
 
 
@@ -3636,8 +3679,8 @@ function AdminArea() {
       };
     }
     return {
-      title: "운영 현황",
-      subtitle: "오늘은 아래 순서대로만 처리하면 됩니다.",
+      title: "운영 캘린더",
+      subtitle: "월간 배송 일정과 정산 현황",
       metrics: [
         ["주소 확인", `${dateDeliveries.filter((delivery) => !delivery.addressConfirmed).length}건`],
         ["주문 준비", `${dateDeliveries.filter((delivery) => delivery.addressConfirmed && !delivery.orderPrepared).length}건`],
@@ -3686,41 +3729,28 @@ function AdminArea() {
   }
 
   return (
-    <div className={menuCollapsed ? "admin-console-shell sidebar-collapsed" : "admin-console-shell"}>
+    <div className={`admin-console-shell calendar-admin ${menuCollapsed ? "sidebar-collapsed" : ""}`}>
       <AdminConsoleSidebar
         collapsed={menuCollapsed}
         current={tab}
-        onChange={setTab}
+        onChange={selectAdminTab}
         onToggle={() => setMenuCollapsed((collapsed) => !collapsed)}
       />
       <main className="admin-console-main">
         <AdminConsoleTopBar
           apiStatus={apiStatus}
-          currentTitle={content.title}
           onLogout={logoutAdmin}
-          onSearchTermChange={setSearchTerm}
-          searchTerm={searchTerm}
+          onRefresh={refreshSpringData}
         />
-        <div className="admin-module-bar">
-          <button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")} type="button">셀러드 운영</button>
-          <button className={tab === "customers" || tab === "orders" ? "active" : ""} onClick={() => setTab("orders")} type="button">고객/주문</button>
-          <button className={tab === "dispatch" || tab === "drivers" || tab === "bags" ? "active" : ""} onClick={() => setTab("dispatch")} type="button">배송관리</button>
-          <button className={tab === "settlements" ? "active" : ""} onClick={() => setTab("settlements")} type="button">정산</button>
-          <button className={tab === "coverage" ? "active" : ""} onClick={() => setTab("coverage")} type="button">배송 범위</button>
-        </div>
         <section className="admin-page-panel">
-          <div className="admin-breadcrumb">
-            <IonIcon icon={homeOutline} />
-            <span>관리자 웹</span>
-            <span>{content.title}</span>
-          </div>
           <div className="admin-page-head">
             <div>
               <h1>{content.title}</h1>
               <p>{content.subtitle}</p>
             </div>
             <div className="admin-page-actions">
-              <label className="admin-date-picker">
+              {tab === "overview" || tab === "settlements" ? <AdminDataSource demo={settlementDemoMode} onChange={setSettlementDemoMode} /> : <>
+              {["customers", "orders", "dispatch", "drivers", "bags"].includes(tab) && <label className="admin-date-picker">
                 <IonIcon icon={calendarOutline} />
                 <input
                   aria-label="운영 날짜"
@@ -3728,19 +3758,15 @@ function AdminArea() {
                   value={adminSelectedDate}
                   onChange={(event) => setAdminSelectedDate(event.currentTarget.value)}
                 />
-              </label>
+              </label>}
               <IonButton onClick={handleNewRegistration}>
                 {primaryActionLabel()}
               </IonButton>
+              </>}
             </div>
           </div>
-          {tab === "settlements" && <div className="settlement-mode-bar">
-            <div role="group" aria-label="정산 내역 선택">
-              <button type="button" aria-pressed={!settlementDemoMode} onClick={() => setSettlementDemoMode(false)}>실제 내역</button>
-              <button type="button" aria-pressed={settlementDemoMode} onClick={() => setSettlementDemoMode(true)}>샘플 내역</button>
-            </div>
-            {settlementDemoMode && <span>테스트 데이터 · 실제 주문 정산에 반영되지 않습니다.</span>}
-          </div>}
+          {(!(settlementDemoMode && (tab === "overview" || tab === "settlements"))) && (dataLoading || dataError) && <div role={dataError ? "alert" : "status"} className={`admin-load-state ${dataError ? "error" : ""}`}>{dataError || "기간 데이터를 불러오는 중입니다."}</div>}
+          {tab === "overview" ? <AdminCalendarDashboard deliveries={overviewDeliveries} month={calendarMonth} selectedDate={adminSelectedDate} onMonthChange={changeCalendarMonth} onSelectDate={setAdminSelectedDate} onOpen={openCalendarSection} demo={settlementDemoMode} approvalCount={driverProfiles.filter((driver) => driver.status === "승인 대기").length} /> : tab === "settlements" ? <AdminSettlementWorkspace key={settlementDemoMode ? "sample" : "actual"} deliveries={settlementDeliveries} range={settlementRange} onRangeChange={setSettlementRange} renderDetails={(deliveries) => <SettlementManagement deliveries={deliveries} onUpdateDelivery={updateSettlement} showSummary={false} actionsDisabled={!settlementDemoMode && (dataLoading || !!dataError)} />} /> : <>
           {tab !== "coverage" && <><AdminFilterPanel
             onSearchTermChange={setSearchTerm}
             onStatusFilterChange={setStatusFilter}
@@ -3773,7 +3799,7 @@ function AdminArea() {
             </div>
           ))}
         </div>
-        <IonGrid className={`admin-layout ${tab === "coverage" || tab === "settlements" ? "admin-layout-full" : ""}`}>
+        <IonGrid className="admin-layout admin-layout-full">
           <IonCard>
             <IonCardHeader>
               <IonCardTitle>{content.title}</IonCardTitle>
@@ -3782,16 +3808,6 @@ function AdminArea() {
             <IonCardContent>
               {tab === "coverage" ? (
                 <DeliveryCoverageManagement zoneNames={deliveryZones} ranges={coverageRanges} assignments={zoneAssignments} deliveries={dateDeliveries} loadMap={loadCoverageMap} onSave={saveCoverage} newRequest={coverageNewRequest} />
-              ) : tab === "overview" ? (
-                <AdminSimpleWorkflow
-                  deliveries={dispatchDeliveries}
-                  nextAddressCheck={nextAddressCheck}
-                  nextBagCollect={nextBagCollect}
-                  nextDispatch={nextDispatch}
-                  nextOrderPrepare={nextOrderPrepare}
-                  onAutoAssign={autoAssignDelivery}
-                  onUpdateDelivery={updateDelivery}
-                />
               ) : tab === "dispatch" ? (
                 <DispatchManagement
                   assignedDeliveries={assignedDeliveries}
@@ -3823,8 +3839,6 @@ function AdminArea() {
                 />
               ) : tab === "bags" ? (
                 <BagManagement deliveries={dateDeliveries} onUpdateDelivery={updateDelivery} />
-              ) : tab === "settlements" ? (
-                <SettlementManagement deliveries={settlementDeliveries} onUpdateDelivery={updateSettlement} />
               ) : tab === "drivers" ? (
                 <DriverApprovalManagement
                   deliveries={dispatchDeliveries}
@@ -3848,23 +3862,10 @@ function AdminArea() {
               )}
             </IonCardContent>
           </IonCard>
-          {tab !== "coverage" && tab !== "settlements" && <IonCard>
-            <IonCardHeader>
-              <IonCardTitle>빠른 작업</IonCardTitle>
-              <IonCardSubtitle>한 번에 하나씩 처리하면 됩니다.</IonCardSubtitle>
-            </IonCardHeader>
-            <IonCardContent>
+          {tab !== "coverage" && <details className="admin-advanced-tools">
+            <summary>추가 작업</summary>
               <div className="admin-actions">
-                {tab === "overview" ? (
-                  <>
-                    <IonButton disabled={!nextAddressCheck && !nextOrderPrepare && !nextDispatch && !nextBagCollect} expand="block" onClick={processNextTask}>
-                      다음 할 일 처리
-                    </IonButton>
-                    <IonButton expand="block" fill="outline" onClick={() => setTab("orders")}>주문 관리 보기</IonButton>
-                    <IonButton expand="block" fill="outline" onClick={() => setTab("dispatch")}>배송 배정 보기</IonButton>
-                    <IonButton expand="block" fill="outline" onClick={resetDispatchDemo}>데모 초기화</IonButton>
-                  </>
-                ) : tab === "dispatch" ? (
+                {tab === "dispatch" ? (
                   <>
                     <IonButton disabled={unassignedDeliveries.length === 0} expand="block" onClick={() => {
                       const nextDelivery = unassignedDeliveries[0];
@@ -3952,113 +3953,15 @@ function AdminArea() {
                   ))
                 )}
               </div>
-            </IonCardContent>
-          </IonCard>}
+          </details>}
         </IonGrid>
+        </>}
         </section>
       </main>
     </div>
   );
 }
 
-function AdminSimpleWorkflow({
-  deliveries,
-  nextAddressCheck,
-  nextBagCollect,
-  nextDispatch,
-  nextOrderPrepare,
-  onAutoAssign,
-  onUpdateDelivery,
-}: {
-  deliveries: Delivery[];
-  nextAddressCheck?: Delivery;
-  nextBagCollect?: Delivery;
-  nextDispatch?: Delivery;
-  nextOrderPrepare?: Delivery;
-  onAutoAssign: (deliveryId: string) => void;
-  onUpdateDelivery: (deliveryId: string, patch: Partial<Delivery>) => void;
-}) {
-  const doneCount = deliveries.filter((delivery) => delivery.done).length;
-
-  return (
-    <div className="simple-workflow">
-      <div className="simple-workflow-summary">
-        <strong>오늘은 4단계만 처리하세요.</strong>
-        <span>고객 확인 → 주문 준비 → 배송 배정 → 보냉백 회수</span>
-        <small>배송 완료 {doneCount}건 · 전체 주문 {deliveries.length}건</small>
-      </div>
-      <div className="simple-steps">
-        <SimpleStep
-          actionLabel="주소 확인"
-          description={nextAddressCheck ? `${nextAddressCheck.customer} · ${nextAddressCheck.address}` : "모든 고객 주소 확인 완료"}
-          disabled={!nextAddressCheck}
-          done={!nextAddressCheck}
-          number="1"
-          onAction={() => nextAddressCheck && onUpdateDelivery(nextAddressCheck.id, { addressConfirmed: true })}
-          title="고객 주소 확인"
-        />
-        <SimpleStep
-          actionLabel="준비 완료"
-          description={nextOrderPrepare ? `${nextOrderPrepare.orderNo} · ${nextOrderPrepare.customer}` : "준비할 주문 없음"}
-          disabled={!nextOrderPrepare}
-          done={!nextOrderPrepare}
-          number="2"
-          onAction={() => nextOrderPrepare && onUpdateDelivery(nextOrderPrepare.id, { orderPrepared: true })}
-          title="주문 준비"
-        />
-        <SimpleStep
-          actionLabel="자동 배정"
-          description={nextDispatch ? `${nextDispatch.customer} · ${nextDispatch.zone}` : "배정할 주문 없음"}
-          disabled={!nextDispatch}
-          done={!nextDispatch}
-          number="3"
-          onAction={() => nextDispatch && onAutoAssign(nextDispatch.id)}
-          title="배송 기사 배정"
-        />
-        <SimpleStep
-          actionLabel="회수 완료"
-          description={nextBagCollect ? `${nextBagCollect.customer} · 보냉백 ${nextBagCollect.bagCount}개` : "회수할 보냉백 없음"}
-          disabled={!nextBagCollect}
-          done={!nextBagCollect}
-          number="4"
-          onAction={() => nextBagCollect && onUpdateDelivery(nextBagCollect.id, { bagCollected: true })}
-          title="보냉백 회수"
-        />
-      </div>
-    </div>
-  );
-}
-
-function SimpleStep({
-  actionLabel,
-  description,
-  disabled,
-  done,
-  number,
-  onAction,
-  title,
-}: {
-  actionLabel: string;
-  description: string;
-  disabled: boolean;
-  done: boolean;
-  number: string;
-  onAction: () => void;
-  title: string;
-}) {
-  return (
-    <div className={done ? "simple-step done" : "simple-step"}>
-      <div className="simple-step-number">{number}</div>
-      <div>
-        <strong>{title}</strong>
-        <span>{description}</span>
-      </div>
-      <IonButton disabled={disabled} size="small" onClick={onAction}>
-        {done ? "완료" : actionLabel}
-      </IonButton>
-    </div>
-  );
-}
 
 function DispatchManagement({
   assignedDeliveries,
@@ -4710,9 +4613,13 @@ function BagManagement({
 function SettlementManagement({
   deliveries,
   onUpdateDelivery,
+  showSummary = true,
+  actionsDisabled = false,
 }: {
   deliveries: Delivery[];
   onUpdateDelivery: (deliveryId: string, patch: Partial<Delivery>) => void;
+  showSummary?: boolean;
+  actionsDisabled?: boolean;
 }) {
   const completedDeliveries = deliveries.filter((delivery) => delivery.done);
   const settleableDeliveries = completedDeliveries.filter((delivery) => settlementStatus(delivery) === "정산 가능");
@@ -4725,15 +4632,15 @@ function SettlementManagement({
     return (
       <div className="settlement-empty">
         <IonIcon icon={cashOutline} />
-        <strong>정산할 완료 배송이 없습니다.</strong>
-        <span>기사 앱에서 배송 완료 처리된 주문만 정산 목록에 표시됩니다.</span>
+        <strong>조회된 정산 내역이 없습니다.</strong>
+        <span>선택한 기간과 조건에 해당하는 배송 완료 건이 없습니다.</span>
       </div>
     );
   }
 
   return (
     <div className="settlement-panel">
-      <div className="settlement-summary">
+      {showSummary && <div className="settlement-summary">
         <div>
           <span>완료 배송 총액</span>
           <strong>{completedDeliveries.reduce((sum, delivery) => sum + settlementAmount(delivery), 0).toLocaleString()}원</strong>
@@ -4750,10 +4657,10 @@ function SettlementManagement({
           <span>보류 금액 · {blockedDeliveries.length}건</span>
           <strong>{blockedDeliveries.reduce((sum, delivery) => sum + settlementAmount(delivery), 0).toLocaleString()}원</strong>
         </div>
-      </div>
+      </div>}
       <div className="settlement-table-scroll">
       <table className="settlement-table">
-        <thead><tr><th>주문 / 고객</th><th>담당 기사</th><th>수량</th><th>단가</th><th>정산 금액</th><th>상태</th><th>처리</th></tr></thead>
+        <thead><tr><th>배송일</th><th>주문 / 고객</th><th>담당 기사</th><th>수량</th><th>단가</th><th>정산 금액</th><th>상태</th><th>처리</th></tr></thead>
         <tbody>
         {completedDeliveries.map((delivery) => {
           const status = settlementStatus(delivery);
@@ -4761,6 +4668,7 @@ function SettlementManagement({
 
           return (
             <tr key={delivery.id}>
+              <td className="settlement-delivery-date">{delivery.deliveryDate}</td>
               <td><strong>{delivery.customer}</strong><small>{delivery.orderNo}</small></td>
               <td>{delivery.assignedDriver ?? "미배정"}</td>
               <td>{delivery.saladCount ?? 1}개</td>
@@ -4768,21 +4676,20 @@ function SettlementManagement({
               <td className="money"><strong>{settlementAmount(delivery).toLocaleString()}원</strong></td>
               <td><IonBadge color={adminBadgeColor(status)}>{status}</IonBadge></td>
               <td><div className="row-actions">
-                <IonButton
-                  disabled={!canSettle}
+                {canSettle ? <IonButton
+                  disabled={actionsDisabled}
                   size="small"
                   onClick={() => onUpdateDelivery(delivery.id, { settled: true })}
                 >
                   정산 완료
-                </IonButton>
-                <IonButton
-                  disabled={!delivery.settled}
+                </IonButton> : delivery.settled ? <IonButton
+                  disabled={actionsDisabled}
                   fill="outline"
                   size="small"
                   onClick={() => onUpdateDelivery(delivery.id, { settled: false })}
                 >
                   정산 취소
-                </IonButton>
+                </IonButton> : <span className="settlement-hold-reason">보냉백 미회수</span>}
               </div></td>
             </tr>
           );
@@ -4937,11 +4844,13 @@ function AdminConsoleSidebar({
           <IonIcon icon={collapsed ? chevronForwardOutline : chevronBackOutline} />
         </button>
       </div>
-      <div className="admin-menu-section">MENU</div>
       <nav>
-        {adminMenuItems.map((item) => (
+        {[{ label: "운영", tabs: ["overview", "orders", "customers"] }, { label: "배송", tabs: ["dispatch", "coverage", "drivers", "bags"] }, { label: "정산 · 설정", tabs: ["settlements", "products", "naver", "admins"] }].map((group) => <div className="admin-nav-group" key={group.label}><div className="admin-menu-section">{group.label}</div>{group.tabs.map((value) => adminMenuItems.find((item) => item.value === value)!).map((item) => (
           <button
             className={current === item.value ? "active" : ""}
+            aria-label={item.label}
+            title={collapsed ? item.label : undefined}
+            aria-current={current === item.value ? "page" : undefined}
             key={item.value}
             onClick={() => onChange(item.value)}
             type="button"
@@ -4949,56 +4858,37 @@ function AdminConsoleSidebar({
             <IonIcon icon={item.icon} />
             <span>{item.label}</span>
           </button>
-        ))}
+        ))}</div>)}
       </nav>
-      <div className="admin-sidebar-card">
-        <span>오늘 운영 상태</span>
-        <strong>정상</strong>
-        <small>배송/기사/보냉백 모니터링</small>
-      </div>
+      <div className="admin-sidebar-footer"><IonIcon icon={calendarOutline} /><span>{seoulToday().replace(/-/g, ".")}</span></div>
     </aside>
   );
 }
 
 function AdminConsoleTopBar({
   apiStatus,
-  currentTitle,
   onLogout,
-  onSearchTermChange,
-  searchTerm,
+  onRefresh,
 }: {
   apiStatus: string;
-  currentTitle: string;
   onLogout: () => void;
-  onSearchTermChange: (value: string) => void;
-  searchTerm: string;
+  onRefresh: () => void;
 }) {
   return (
     <div className="admin-console-topbar">
       <div className="admin-topbar-title">
-        <span>Dashboard</span>
-        <strong>{currentTitle}</strong>
-      </div>
-      <div className="admin-topbar-search">
-        <IonIcon icon={searchOutline} />
-        <input
-          onChange={(event) => onSearchTermChange(event.currentTarget.value)}
-          placeholder="고객명, 주문번호, 기사명 검색"
-          value={searchTerm}
-        />
+        <strong>셀러드 운영센터</strong>
       </div>
       <div className="admin-topbar-actions">
-        <span className="admin-api-status">{apiStatus}</span>
-        <button aria-label="알림" type="button">
-          <IonIcon icon={notificationsOutline} />
-          <span>3</span>
+        <span className="admin-api-status">{apiStatus.includes("연결됨") ? "서버 연결됨" : apiStatus.includes("확인중") ? "불러오는 중" : apiStatus}</span>
+        <button aria-label="데이터 새로고침" title="데이터 새로고침" type="button" onClick={onRefresh}>
+          <IonIcon icon={refreshOutline} />
         </button>
         <button aria-label="로그아웃" title="로그아웃" type="button" onClick={onLogout}>
           <IonIcon icon={logOutOutline} />
         </button>
         <div className="admin-operator">
           <div>관</div>
-          <span>운영자</span>
           <strong>관리자</strong>
         </div>
       </div>
@@ -5183,7 +5073,7 @@ function bagStatus(delivery: Delivery) {
 }
 
 function settlementAmount(delivery: Delivery) {
-  return (delivery.saladCount ?? 1) * (delivery.settlementUnitPrice ?? DEFAULT_SALAD_UNIT_PRICE);
+  return deliveryAmount(delivery);
 }
 
 function buildSettlementSamples(date: string): Delivery[] {
@@ -5193,17 +5083,22 @@ function buildSettlementSamples(date: string): Delivery[] {
     { customer: "샘플 고객 C", saladCount: 1, settlementUnitPrice: 7900, bagCount: 1, bagCollected: false, settled: false, done: true },
     { customer: "샘플 고객 D", saladCount: 1, settlementUnitPrice: 8900, bagCount: 0, bagCollected: true, settled: false, done: false },
   ];
-  return samples.map((sample, index) => ({
+  const month = monthRange(date);
+  const previous = monthRange(shiftCalendarDate(month.from, -1));
+  const dates = Array.from(new Set([date, month.from, shiftCalendarDate(month.from, 7), shiftCalendarDate(month.from, 14), shiftCalendarDate(date, -6), previous.from, previous.to])).filter((day) => day <= date);
+  const entries = dates.flatMap((day) => samples.map((sample, index) => ({
     ...initialDeliveries[index % initialDeliveries.length], ...sample,
-    id: `settlement-sample-${date}-${index}`, orderNo: `SAMPLE-${date.replace(/-/g, "")}-${index + 1}`,
-    deliveryDate: date,
-  }));
+    id: `settlement-sample-${day}-${index}`, orderNo: `SAMPLE-${day.replace(/-/g, "")}-${index + 1}`,
+    deliveryDate: day, assignedDriver: index % 2 ? "정루트" : "박배송",
+  })));
+  return [...entries, ...[1, 3, 7].map((offset) => {
+    const day = shiftCalendarDate(date, offset);
+    return { ...initialDeliveries[0], ...samples[3], id: `settlement-sample-future-${day}`, orderNo: `SAMPLE-${day.replace(/-/g, "")}-future`, deliveryDate: day };
+  })];
 }
 
 function settlementStatus(delivery: Delivery) {
-  if (!delivery.done) return "배송 미완료";
-  if (delivery.bagCount > 0 && !delivery.bagCollected) return "보냉백 확인";
-  return delivery.settled ? "정산 완료" : "정산 가능";
+  return deliverySettlementStatus(delivery);
 }
 
 function adminRowIcon(tab: AdminTab) {

@@ -191,10 +191,10 @@ async function springRequest<T>(path: string, options: RequestInit = {}) {
   return body.data;
 }
 
-export async function loadSpringSnapshot(): Promise<SpringSnapshot> {
+export async function loadSpringSnapshot(range?: { from: string; to: string }): Promise<SpringSnapshot> {
   const [customers, deliveries, drivers, zones] = await Promise.all([
     springRequest<SpringCustomer[]>("/customers"),
-    springRequest<SpringDelivery[]>("/deliveries/today"),
+    springRequest<SpringDelivery[]>(range ? `/deliveries?${new URLSearchParams(range).toString()}` : "/deliveries/today"),
     springRequest<SpringDriver[]>("/drivers"),
     springRequest<SpringZone[]>("/zones"),
   ]);

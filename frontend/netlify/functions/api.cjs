@@ -1,4 +1,5 @@
 const { validateZoneInput } = require("./lib/zone-geometry.cjs");
+const { dateRangeError } = require("./lib/date-range.cjs");
 const today = new Date().toISOString().slice(0, 10);
 
 const state = {
@@ -485,6 +486,13 @@ exports.handler = async function handler(event) {
 
   if (path === "/deliveries/today" && method === "GET") {
     return ok(state.deliveries.map(publicDelivery));
+  }
+
+  if (path === "/deliveries" && method === "GET") {
+    const { from, to } = event.queryStringParameters || {};
+    const error = dateRangeError(from, to);
+    if (error) return fail(400, error);
+    return ok(state.deliveries.filter((delivery) => delivery.deliveryDate >= from && delivery.deliveryDate <= to && !["CANCELLED", "SKIPPED"].includes(delivery.status)).sort((a, b) => a.deliveryDate.localeCompare(b.deliveryDate) || (a.routeOrder ?? 0) - (b.routeOrder ?? 0)).map(publicDelivery));
   }
 
   if (path === "/deliveries" && method === "POST") {

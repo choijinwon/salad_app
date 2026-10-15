@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -40,6 +41,18 @@ public class DeliveryService {
         this.profileRepository = profileRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.zoneRepository = zoneRepository;
+    }
+
+    @Transactional(readOnly = true)
+    public List<DeliveryResponse> getByPeriod(LocalDate from, LocalDate to) {
+        if (from == null || to == null || to.isBefore(from) || ChronoUnit.DAYS.between(from, to) >= 366) {
+            throw new IllegalArgumentException("시작일과 종료일을 올바르게 지정해주세요. 조회 기간은 최대 366일입니다.");
+        }
+        return deliveryScheduleRepository.findByDeliveryDateBetweenOrderByDeliveryDateAscRouteOrderAsc(from, to)
+                .stream()
+                .filter(schedule -> schedule.getStatus() != DeliveryStatus.CANCELLED && schedule.getStatus() != DeliveryStatus.SKIPPED)
+                .map(this::toResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)
