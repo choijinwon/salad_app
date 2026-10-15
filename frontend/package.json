@@ -26,6 +26,7 @@
     "start": "vite --host 127.0.0.1",
     "dev": "vite --host 127.0.0.1",
     "build": "tsc && vite build",
+    "build:netlify": "node scripts/check_netlify_env.mjs && npm run build",
     "build:customer": "VITE_APP_VARIANT=customer npm run build",
     "build:driver": "VITE_APP_VARIANT=driver npm run build",
     "icons:customer": "python3 scripts/generate_variant_icons.py customer",
